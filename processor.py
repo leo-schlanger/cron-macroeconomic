@@ -230,7 +230,7 @@ def process_single_news(news: dict) -> bool:
         return False
 
 
-def queue_high_priority_news(min_score: float = 2.0, limit: int = 20):
+def queue_high_priority_news(min_score: float = 4.0, limit: int = 20):
     """Adiciona notícias de alta prioridade à fila de processamento."""
     conn = get_connection()
 

@@ -34,7 +34,7 @@ jobs:
         run: python processor.py init
 
       - name: Adicionar notícias de alta prioridade à fila
-        run: python processor.py queue --min-score 2.0 --limit 20
+        run: python processor.py queue --min-score 4.0 --limit 20
 
       - name: Processar notícias
         run: python processor.py process --limit ${{ github.event.inputs.limit || '10' }}
