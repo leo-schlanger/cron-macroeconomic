@@ -1,0 +1,39 @@
+name: Fetch News Cron
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # A cada hora
+  workflow_dispatch:
+    inputs:
+      category:
+        description: 'Categoria (opcional)'
+        required: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Fetch notícias
+        run: |
+          if [ -n "${{ github.event.inputs.category }}" ]; then
+            python main_cloud.py fetch --category ${{ github.event.inputs.category }}
+          else
+            python main_cloud.py fetch
+          fi
+
+      - name: Estatísticas
+        run: python main_cloud.py stats
