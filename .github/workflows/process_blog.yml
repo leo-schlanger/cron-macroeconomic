@@ -1,0 +1,43 @@
+name: Process Blog Posts
+
+on:
+  schedule:
+    - cron: '30 */2 * * *'  # A cada 2 horas, minuto 30
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Número de notícias para processar'
+        required: false
+        default: '10'
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      AI_PROVIDER: openai
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar dependências
+        run: pip install -r requirements.txt
+
+      - name: Inicializar tabelas de blog
+        run: python processor.py init
+
+      - name: Adicionar notícias de alta prioridade à fila
+        run: python processor.py queue --min-score 2.0 --limit 20
+
+      - name: Processar notícias
+        run: python processor.py process --limit ${{ github.event.inputs.limit || '10' }}
+
+      - name: Estatísticas
+        run: python processor.py stats

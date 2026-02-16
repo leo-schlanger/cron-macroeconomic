@@ -121,9 +121,45 @@ python main_turso.py fetch
 
 **Total: $0/mês**
 
+## Processamento para Blog
+
+O sistema pode reescrever notícias automaticamente para formato de blog:
+
+```bash
+# Inicializar tabelas de blog
+python processor.py init
+
+# Adicionar notícias de alta prioridade à fila
+python processor.py queue --min-score 2.0 --limit 20
+
+# Processar notícias (reescrever com IA)
+python processor.py process --limit 10
+
+# Ver estatísticas
+python processor.py stats
+```
+
+### Estrutura do Blog Post
+
+| Campo | Descrição |
+|-------|-----------|
+| `title_pt` / `title_en` | Título em PT-BR e EN |
+| `content_pt` / `content_en` | Conteúdo reescrito |
+| `summary_pt` / `summary_en` | Resumo para preview |
+| `image_url` | Imagem de capa extraída |
+| `source_url` | Link da fonte original |
+| `source_name` | Nome da fonte |
+| `tags` | Tags geradas pela IA |
+
+### Secrets necessários
+
+| Secret | Descrição |
+|--------|-----------|
+| `DATABASE_URL` | Connection string Supabase |
+| `OPENAI_API_KEY` | API key OpenAI (para reescrita) |
+
 ## Próximos Passos
 
 - [ ] API REST para servir ao blog
 - [ ] Notificações Telegram para alta prioridade
-- [ ] Tradução automática
 - [ ] Dashboard de métricas
