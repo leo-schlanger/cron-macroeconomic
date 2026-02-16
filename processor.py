@@ -16,6 +16,7 @@ from database_blog import (
     add_to_processing_queue, get_blog_stats
 )
 from database_supabase import get_connection, is_postgres
+from deduplication import deduplicate_news_for_blog
 
 # APIs disponíveis
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -287,8 +288,13 @@ def process_queue(limit: int = 10):
     print(f"Usando: {provider}")
 
     # Pegar notícias pendentes
-    pending = get_pending_news(limit)
-    print(f"Notícias pendentes: {len(pending)}\n")
+    pending = get_pending_news(limit * 2)  # Pegar mais para compensar duplicatas
+    print(f"Notícias na fila: {len(pending)}")
+
+    # Deduplicar antes de processar
+    pending = deduplicate_news_for_blog(pending)
+    pending = pending[:limit]  # Limitar após deduplicação
+    print(f"Após deduplicação: {len(pending)}\n")
 
     success = 0
     errors = 0

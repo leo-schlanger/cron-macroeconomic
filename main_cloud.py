@@ -31,7 +31,8 @@ def run_fetch(category: str = None, verbose: bool = True):
         print(f"  Fontes: {summary['successful']}/{summary['total_sources']} OK")
         print(f"  Notícias encontradas: {summary['total_news']}")
         print(f"  Novas salvas: {summary['new_news']}")
-        print(f"  Filtradas: {summary['skipped']}")
+        print(f"  Duplicatas ignoradas: {summary.get('duplicates', 0)}")
+        print(f"  Filtradas (keywords): {summary['skipped']}")
 
         if summary['failed'] > 0:
             print(f"\nFalhas ({summary['failed']}):")
