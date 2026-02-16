@@ -16,8 +16,8 @@ jobs:
 
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      AI_PROVIDER: openai
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AI_PROVIDER: anthropic
 
     steps:
       - uses: actions/checkout@v4
