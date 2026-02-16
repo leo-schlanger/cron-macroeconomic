@@ -166,7 +166,21 @@ RESPONDA APENAS EM JSON (sem markdown):
     # Extrair JSON da resposta
     json_match = re.search(r'\{[\s\S]*\}', text)
     if json_match:
-        return json.loads(json_match.group())
+        json_str = json_match.group()
+        # Remover caracteres de controle inválidos em JSON (exceto \n \r \t que são comuns)
+        # Substituir por espaço para não perder separação de palavras
+        json_str = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', ' ', json_str)
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            # Fallback: tentar normalizar quebras de linha dentro de strings JSON
+            # Substitui newlines literais por \n escapado dentro de valores string
+            def fix_string_newlines(m):
+                s = m.group(0)
+                s = s.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+                return s
+            json_str = re.sub(r'"[^"]*"', fix_string_newlines, json_str)
+            return json.loads(json_str)
     else:
         raise Exception("Não foi possível extrair JSON da resposta")
 
