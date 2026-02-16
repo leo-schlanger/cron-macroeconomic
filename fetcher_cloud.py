@@ -13,7 +13,7 @@ from database_supabase import (
     get_active_sources, get_keywords, insert_news, update_source_fetch
 )
 
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = 15  # Reduzido para evitar travamentos
 USER_AGENT = "MacroNewsCron/1.0"
 
 
