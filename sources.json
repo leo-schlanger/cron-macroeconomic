@@ -1,0 +1,431 @@
+{
+  "crypto": {
+    "description": "Fontes cripto focadas em impacto institucional e regulatório",
+    "feeds": [
+      {
+        "name": "CoinDesk",
+        "url": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "focus": ["institutional", "regulation", "markets"]
+      },
+      {
+        "name": "The Block",
+        "url": "https://www.theblock.co/rss.xml",
+        "focus": ["institutional", "DeFi", "regulation"]
+      },
+      {
+        "name": "Cointelegraph",
+        "url": "https://cointelegraph.com/rss",
+        "focus": ["markets", "regulation", "adoption"]
+      },
+      {
+        "name": "Decrypt",
+        "url": "https://decrypt.co/feed",
+        "focus": ["markets", "policy", "technology"]
+      },
+      {
+        "name": "Bitcoin Magazine",
+        "url": "https://bitcoinmagazine.com/feed",
+        "focus": ["bitcoin", "policy", "adoption"]
+      },
+      {
+        "name": "CryptoSlate",
+        "url": "https://cryptoslate.com/feed/",
+        "focus": ["markets", "regulation", "institutional"]
+      },
+      {
+        "name": "Blockworks",
+        "url": "https://blockworks.co/feed/",
+        "focus": ["institutional", "DeFi", "markets"]
+      }
+    ]
+  },
+  "macro_global": {
+    "description": "Macroeconomia e política monetária global",
+    "feeds": [
+      {
+        "name": "Bloomberg Markets",
+        "url": "https://feeds.bloomberg.com/markets/news.rss",
+        "focus": ["markets", "fed", "bonds"]
+      },
+      {
+        "name": "Wall Street Journal Markets",
+        "url": "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+        "focus": ["markets", "economy", "fed"]
+      },
+      {
+        "name": "CNBC Economy",
+        "url": "https://www.cnbc.com/id/20910258/device/rss/rss.html",
+        "focus": ["economy", "fed", "inflation"]
+      },
+      {
+        "name": "The Economist",
+        "url": "https://www.economist.com/finance-and-economics/rss.xml",
+        "focus": ["global_economy", "analysis", "policy"]
+      },
+      {
+        "name": "MarketWatch",
+        "url": "https://feeds.marketwatch.com/marketwatch/topstories/",
+        "focus": ["markets", "economy", "stocks"]
+      },
+      {
+        "name": "Yahoo Finance",
+        "url": "https://finance.yahoo.com/news/rssindex",
+        "focus": ["markets", "economy", "stocks"]
+      },
+      {
+        "name": "Investing.com News",
+        "url": "https://www.investing.com/rss/news.rss",
+        "focus": ["markets", "economy", "commodities"]
+      },
+      {
+        "name": "Barrons",
+        "url": "https://www.barrons.com/market-data/rss",
+        "focus": ["markets", "economy", "analysis"]
+      }
+    ]
+  },
+  "central_banks": {
+    "description": "Fontes diretas de bancos centrais",
+    "feeds": [
+      {
+        "name": "Federal Reserve (EUA)",
+        "url": "https://www.federalreserve.gov/feeds/press_all.xml",
+        "focus": ["fed", "policy", "rates"],
+        "region": "north_america"
+      },
+      {
+        "name": "ECB - Banco Central Europeu",
+        "url": "https://www.ecb.europa.eu/rss/press.html",
+        "focus": ["ecb", "euro", "policy"],
+        "region": "europe"
+      },
+      {
+        "name": "Bank of England",
+        "url": "https://www.bankofengland.co.uk/rss/news",
+        "focus": ["boe", "uk_economy", "rates"],
+        "region": "europe"
+      },
+      {
+        "name": "Bank of Japan",
+        "url": "https://www.boj.or.jp/en/rss/whatsnew.xml",
+        "focus": ["boj", "yen", "policy"],
+        "region": "asia"
+      },
+      {
+        "name": "Reserve Bank of Australia",
+        "url": "https://www.rba.gov.au/rss/rss-cb-media-releases.xml",
+        "focus": ["rba", "aud", "policy"],
+        "region": "oceania"
+      },
+      {
+        "name": "Bank of Canada",
+        "url": "https://www.bankofcanada.ca/feed/",
+        "focus": ["boc", "cad", "policy"],
+        "region": "north_america"
+      },
+      {
+        "name": "Swiss National Bank",
+        "url": "https://www.snb.ch/en/service/rss/news",
+        "focus": ["snb", "chf", "policy"],
+        "region": "europe"
+      }
+    ]
+  },
+  "europe": {
+    "description": "Economia europeia e mercados",
+    "feeds": [
+      {
+        "name": "Euronews Business",
+        "url": "https://www.euronews.com/rss?level=vertical&name=business",
+        "focus": ["europe", "economy", "markets"]
+      },
+      {
+        "name": "Der Spiegel International",
+        "url": "https://www.spiegel.de/international/index.rss",
+        "focus": ["germany", "europe", "politics"],
+        "country": "Germany"
+      },
+      {
+        "name": "Handelsblatt (Alemanha)",
+        "url": "https://www.handelsblatt.com/contentexport/feed/top-themen",
+        "focus": ["germany", "economy", "industry"],
+        "country": "Germany"
+      },
+      {
+        "name": "BBC Business",
+        "url": "https://feeds.bbci.co.uk/news/business/rss.xml",
+        "focus": ["uk", "europe", "economy"],
+        "country": "UK"
+      },
+      {
+        "name": "The Guardian Business",
+        "url": "https://www.theguardian.com/uk/business/rss",
+        "focus": ["uk", "economy", "markets"],
+        "country": "UK"
+      },
+      {
+        "name": "DW Business",
+        "url": "https://rss.dw.com/xml/rss-en-bus",
+        "focus": ["germany", "europe", "economy"],
+        "country": "Germany"
+      },
+      {
+        "name": "France24 Business",
+        "url": "https://www.france24.com/en/business/rss",
+        "focus": ["france", "europe", "economy"],
+        "country": "France"
+      }
+    ]
+  },
+  "asia": {
+    "description": "Economia asiática - principais mercados",
+    "feeds": [
+      {
+        "name": "Nikkei Asia",
+        "url": "https://asia.nikkei.com/rss/feed/nar",
+        "focus": ["japan", "asia", "markets"],
+        "country": "Japan"
+      },
+      {
+        "name": "South China Morning Post",
+        "url": "https://www.scmp.com/rss/91/feed",
+        "focus": ["china", "hong_kong", "economy"],
+        "country": "China/HK"
+      },
+      {
+        "name": "The Economic Times (India)",
+        "url": "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
+        "focus": ["india", "economy", "markets"],
+        "country": "India"
+      },
+      {
+        "name": "Mint (India)",
+        "url": "https://www.livemint.com/rss/economy",
+        "focus": ["india", "economy", "policy"],
+        "country": "India"
+      },
+      {
+        "name": "The Straits Times (Singapore)",
+        "url": "https://www.straitstimes.com/news/business/rss.xml",
+        "focus": ["singapore", "asean", "economy"],
+        "country": "Singapore"
+      },
+      {
+        "name": "Bangkok Post Business",
+        "url": "https://www.bangkokpost.com/rss/data/business.xml",
+        "focus": ["thailand", "asean", "economy"],
+        "country": "Thailand"
+      },
+      {
+        "name": "Vietnam News",
+        "url": "https://vietnamnews.vn/rss/economy.rss",
+        "focus": ["vietnam", "asean", "economy"],
+        "country": "Vietnam"
+      },
+      {
+        "name": "Channel News Asia",
+        "url": "https://www.channelnewsasia.com/api/v1/rss-outbound-feed?_format=xml&category=6511",
+        "focus": ["asia", "singapore", "economy"],
+        "country": "Singapore"
+      },
+      {
+        "name": "Yonhap News Economy",
+        "url": "https://en.yna.co.kr/RSS/economy.xml",
+        "focus": ["korea", "economy", "trade"],
+        "country": "South Korea"
+      }
+    ]
+  },
+  "middle_east": {
+    "description": "Oriente Médio - petróleo, economia e geopolítica",
+    "feeds": [
+      {
+        "name": "Al Jazeera Business",
+        "url": "https://www.aljazeera.com/xml/rss/all.xml",
+        "focus": ["middle_east", "oil", "geopolitics"],
+        "country": "Qatar"
+      },
+      {
+        "name": "Times of Israel Business",
+        "url": "https://www.timesofisrael.com/feed/",
+        "focus": ["israel", "tech", "economy"],
+        "country": "Israel"
+      },
+      {
+        "name": "Middle East Eye",
+        "url": "https://www.middleeasteye.net/rss",
+        "focus": ["middle_east", "geopolitics", "oil"],
+        "country": "UK/ME"
+      },
+      {
+        "name": "Khaleej Times Business",
+        "url": "https://www.khaleejtimes.com/rss/business",
+        "focus": ["uae", "gulf", "economy"],
+        "country": "UAE"
+      }
+    ]
+  },
+  "africa": {
+    "description": "Economia africana e mercados emergentes",
+    "feeds": [
+      {
+        "name": "Business Daily Africa",
+        "url": "https://www.businessdailyafrica.com/bd/rss.xml",
+        "focus": ["kenya", "east_africa", "economy"],
+        "country": "Kenya"
+      },
+      {
+        "name": "Morocco World News",
+        "url": "https://www.moroccoworldnews.com/feed/",
+        "focus": ["morocco", "north_africa", "economy"],
+        "country": "Morocco"
+      },
+      {
+        "name": "AllAfrica Business",
+        "url": "https://allafrica.com/tools/headlines/rdf/business/headlines.rdf",
+        "focus": ["africa", "economy", "investment"]
+      },
+      {
+        "name": "African Arguments",
+        "url": "https://africanarguments.org/feed/",
+        "focus": ["africa", "politics", "economy"]
+      },
+      {
+        "name": "IOL Business (South Africa)",
+        "url": "https://www.iol.co.za/cmlink/business-1.8",
+        "focus": ["south_africa", "economy", "markets"],
+        "country": "South Africa"
+      }
+    ]
+  },
+  "latin_america": {
+    "description": "América Latina (incluindo Brasil)",
+    "feeds": [
+      {
+        "name": "Banco Central do Brasil",
+        "url": "https://www.bcb.gov.br/api/feed/sitebcb/sitefeeds/noticias",
+        "focus": ["bcb", "selic", "policy"],
+        "country": "Brazil"
+      },
+      {
+        "name": "InfoMoney",
+        "url": "https://www.infomoney.com.br/feed/",
+        "focus": ["brazil", "markets", "crypto"],
+        "country": "Brazil"
+      },
+      {
+        "name": "Ámbito Financiero (Argentina)",
+        "url": "https://www.ambito.com/rss/economia.xml",
+        "focus": ["argentina", "economy", "peso"],
+        "country": "Argentina"
+      },
+      {
+        "name": "Investing.com Brazil",
+        "url": "https://br.investing.com/rss/news.rss",
+        "focus": ["brazil", "markets", "economy"],
+        "country": "Brazil"
+      },
+      {
+        "name": "BNamericas",
+        "url": "https://www.bnamericas.com/en/rss",
+        "focus": ["latam", "economy", "infrastructure"]
+      },
+      {
+        "name": "MercoPress",
+        "url": "https://en.mercopress.com/rss",
+        "focus": ["latam", "argentina", "brazil"],
+        "country": "Uruguay"
+      }
+    ]
+  },
+  "oceania": {
+    "description": "Austrália e região do Pacífico",
+    "feeds": [
+      {
+        "name": "ABC Australia Business",
+        "url": "https://www.abc.net.au/news/feed/51120/rss.xml",
+        "focus": ["australia", "economy", "markets"],
+        "country": "Australia"
+      },
+      {
+        "name": "Sydney Morning Herald Business",
+        "url": "https://www.smh.com.au/rss/business.xml",
+        "focus": ["australia", "economy", "markets"],
+        "country": "Australia"
+      },
+      {
+        "name": "RNZ Business (New Zealand)",
+        "url": "https://www.rnz.co.nz/rss/business.xml",
+        "focus": ["new_zealand", "economy", "trade"],
+        "country": "New Zealand"
+      }
+    ]
+  },
+  "commodities": {
+    "description": "Commodities e energia - impacto global",
+    "feeds": [
+      {
+        "name": "OilPrice.com",
+        "url": "https://oilprice.com/rss/main",
+        "focus": ["oil", "gas", "energy"]
+      },
+      {
+        "name": "Mining.com",
+        "url": "https://www.mining.com/feed/",
+        "focus": ["mining", "metals", "commodities"]
+      },
+      {
+        "name": "Rigzone",
+        "url": "https://www.rigzone.com/news/rss/rigzone_latest.aspx",
+        "focus": ["oil", "gas", "offshore"]
+      },
+      {
+        "name": "Seeking Alpha Commodities",
+        "url": "https://seekingalpha.com/tag/commodities.xml",
+        "focus": ["commodities", "analysis", "markets"]
+      },
+      {
+        "name": "Platts",
+        "url": "https://www.spglobal.com/commodityinsights/en/rss-feed",
+        "focus": ["commodities", "energy", "prices"]
+      }
+    ]
+  },
+  "keywords": {
+    "high_priority": {
+      "description": "Palavras que indicam notícias de alto impacto",
+      "crypto": [
+        "SEC", "ETF", "CBDC", "regulation", "regulação", "institutional",
+        "halving", "BlackRock", "Fidelity", "Grayscale", "stablecoin",
+        "Tether", "USDC", "ban", "legal tender", "adoption", "Fed",
+        "treasury", "sanctions", "Binance", "Coinbase", "legal",
+        "MicroStrategy", "spot ETF", "futures ETF", "custody"
+      ],
+      "macro": [
+        "interest rate", "taxa de juros", "inflation", "inflação",
+        "recession", "recessão", "GDP", "PIB", "unemployment", "desemprego",
+        "Fed", "ECB", "BCE", "rate hike", "rate cut", "corte de juros",
+        "quantitative easing", "QE", "tapering", "yield curve",
+        "treasury", "bonds", "default", "debt ceiling", "teto da dívida",
+        "banking crisis", "crise bancária", "liquidity", "liquidez",
+        "CPI", "core inflation", "payroll", "jobs report", "FOMC"
+      ],
+      "geopolitical": [
+        "sanctions", "sanções", "trade war", "guerra comercial",
+        "tariff", "tarifa", "embargo", "BRICS", "G7", "G20",
+        "IMF", "FMI", "World Bank", "Banco Mundial", "oil crisis",
+        "energy crisis", "supply chain", "cadeia de suprimentos",
+        "de-dollarization", "petrodollar", "currency war"
+      ]
+    },
+    "filter_out": {
+      "description": "Palavras para ignorar - notícias de baixo impacto",
+      "terms": [
+        "meme coin", "NFT drop", "airdrop", "giveaway", "price prediction",
+        "technical analysis", "análise técnica", "moon", "pump", "shitcoin",
+        "celebrity", "influencer", "memecoin", "solana meme", "pepe",
+        "doge", "shiba", "1000x", "gem alert"
+      ]
+    }
+  }
+}
