@@ -281,9 +281,11 @@ def save_blog_post(
                 news_id, title_pt, slug_pt, content_pt, summary_pt,
                 title_en, slug_en, content_en, summary_en,
                 image_url, source_url, source_name, category, tags, priority_score,
-                meta_description_pt, meta_description_en
+                meta_description_pt, meta_description_en,
+                status, published_at
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                'published', NOW()
             ) RETURNING id
         """, (
             news_id, title_pt, slug_pt, content_pt, summary_pt,
