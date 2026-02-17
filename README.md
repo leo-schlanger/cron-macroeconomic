@@ -5,7 +5,7 @@ Agregador de notícias macroeconômicas e crypto com priorização inteligente p
 ## Stack
 
 - **Python 3.11+**
-- **Turso** (SQLite cloud) - 9GB grátis
+- **Supabase** (PostgreSQL cloud)
 - **GitHub Actions** - Cron ilimitado
 
 ## Fontes (61 RSS feeds)
@@ -25,22 +25,11 @@ Agregador de notícias macroeconômicas e crypto com priorização inteligente p
 
 ## Setup Rápido
 
-### 1. Criar conta no Turso
+### 1. Criar projeto no Supabase
 
-```bash
-# Instalar CLI
-curl -sSfL https://get.tur.so/install.sh | bash
-
-# Login
-turso auth login
-
-# Criar database
-turso db create macro-news
-
-# Pegar credenciais
-turso db show macro-news --url
-turso db tokens create macro-news
-```
+1. Acesse [supabase.com](https://supabase.com) e crie uma conta
+2. Crie um novo projeto
+3. Copie a connection string em **Settings > Database > Connection string > URI**
 
 ### 2. Criar repositório no GitHub
 
@@ -60,8 +49,7 @@ Vá em **Settings > Secrets and variables > Actions** e adicione:
 
 | Secret | Valor |
 |--------|-------|
-| `TURSO_DATABASE_URL` | `libsql://macro-news-seu-usuario.turso.io` |
-| `TURSO_AUTH_TOKEN` | Token gerado pelo Turso |
+| `DATABASE_URL` | `postgresql://user:pass@host:5432/postgres` |
 
 ### 4. Executar setup inicial
 
@@ -82,11 +70,10 @@ python main.py setup
 python main.py fetch
 python main.py stats
 
-# Com Turso
-export TURSO_DATABASE_URL="libsql://..."
-export TURSO_AUTH_TOKEN="..."
-python main_turso.py setup
-python main_turso.py fetch
+# Com Supabase
+export DATABASE_URL="postgresql://..."
+python main_cloud.py setup
+python main_cloud.py fetch
 ```
 
 ## Estrutura
@@ -94,12 +81,14 @@ python main_turso.py fetch
 ```
 ├── .github/workflows/
 │   ├── fetch_news.yml      # Cron horário
+│   ├── process_blog.yml    # Processa blog a cada 2h
 │   └── setup_db.yml        # Setup inicial
 ├── sources.json            # Fontes RSS
-├── database_turso.py       # DB com suporte Turso
-├── fetcher_turso.py        # Coletor RSS
-├── main_turso.py           # CLI principal
-└── test_feeds_turso.py     # Testa feeds
+├── database_supabase.py    # Driver PostgreSQL/Supabase
+├── fetcher_cloud.py        # Coletor RSS
+├── main_cloud.py           # CLI principal
+├── processor.py            # Reescrita com IA
+└── deduplication.py        # Detecção de duplicatas
 ```
 
 ## Keywords de Priorização
@@ -116,7 +105,7 @@ python main_turso.py fetch
 
 | Serviço | Uso estimado | Limite grátis |
 |---------|--------------|---------------|
-| Turso | ~60MB/mês | 9GB |
+| Supabase | ~60MB/mês | 500MB |
 | GitHub Actions | ~3000 min/mês | Ilimitado (repo público) |
 
 **Total: $0/mês**
