@@ -1,7 +1,7 @@
-name: Update Keywords (Filters)
+name: Update Keywords
 
 on:
-  workflow_dispatch:  # Permite execução manual
+  workflow_dispatch:
 
 jobs:
   update:
