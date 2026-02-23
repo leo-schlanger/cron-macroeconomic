@@ -3,18 +3,20 @@ import requests
 from datetime import datetime
 from typing import Optional
 import time
-import re
 from dateutil import parser as date_parser
 
 from database import (
     get_active_sources, get_keywords, insert_news,
     update_source_fetch, get_connection
 )
+from utils import retry, request_limiter, logger, Timer, RetryError
+from html_parser import clean_html
 
 
 # Configurações
 REQUEST_TIMEOUT = 30
 USER_AGENT = "MacroNewsCron/1.0 (News Aggregator)"
+MAX_RETRIES = 3
 
 
 def calculate_priority(title: str, description: str, positive_keywords: list,
@@ -53,36 +55,33 @@ def parse_date(date_str: str) -> Optional[datetime]:
 
     try:
         return date_parser.parse(date_str)
-    except:
+    except (ValueError, TypeError, OverflowError):
         return None
 
 
+@retry(
+    max_attempts=MAX_RETRIES,
+    delay=1.0,
+    backoff=2.0,
+    exceptions=(requests.exceptions.RequestException, requests.exceptions.Timeout)
+)
 def fetch_feed(url: str) -> Optional[feedparser.FeedParserDict]:
-    """Faz o fetch de um feed RSS."""
-    try:
-        headers = {"User-Agent": USER_AGENT}
-        response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-        response.raise_for_status()
+    """Faz o fetch de um feed RSS com retry automático."""
+    # Rate limiting
+    request_limiter.wait()
 
-        feed = feedparser.parse(response.content)
+    headers = {"User-Agent": USER_AGENT}
+    response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
 
-        if feed.bozo and not feed.entries:
-            return None
+    feed = feedparser.parse(response.content)
 
-        return feed
-    except requests.exceptions.RequestException as e:
-        raise Exception(f"Request error: {str(e)}")
-    except Exception as e:
-        raise Exception(f"Parse error: {str(e)}")
+    if feed.bozo and not feed.entries:
+        return None
+
+    return feed
 
 
-def clean_html(text: str) -> str:
-    """Remove tags HTML de um texto."""
-    if not text:
-        return ""
-    clean = re.sub(r'<[^>]+>', '', text)
-    clean = re.sub(r'\s+', ' ', clean)
-    return clean.strip()
 
 
 def process_feed(source: dict, positive_keywords: list, negative_keywords: list) -> dict:
@@ -90,93 +89,94 @@ def process_feed(source: dict, positive_keywords: list, negative_keywords: list)
     Processa um feed RSS e salva as notícias no banco.
     Retorna estatísticas do processamento.
     """
-    start_time = time.time()
-    stats = {
-        "source_id": source["id"],
-        "source_name": source["name"],
-        "success": False,
-        "news_count": 0,
-        "new_count": 0,
-        "skipped_count": 0,
-        "error": None
-    }
+    with Timer(f"fetch {source['name']}") as timer:
+        stats = {
+            "source_id": source["id"],
+            "source_name": source["name"],
+            "success": False,
+            "news_count": 0,
+            "new_count": 0,
+            "skipped_count": 0,
+            "error": None
+        }
 
-    try:
-        feed = fetch_feed(source["url"])
+        try:
+            feed = fetch_feed(source["url"])
 
-        if not feed:
-            raise Exception("Feed vazio ou inválido")
+            if not feed:
+                raise Exception("Feed vazio ou inválido")
 
-        stats["news_count"] = len(feed.entries)
+            stats["news_count"] = len(feed.entries)
 
-        for entry in feed.entries:
-            title = clean_html(entry.get("title", ""))
-            link = entry.get("link", "")
+            for entry in feed.entries:
+                title = clean_html(entry.get("title", ""))
+                link = entry.get("link", "")
 
-            if not title or not link:
-                continue
+                if not title or not link:
+                    continue
 
-            description = clean_html(
-                entry.get("summary", "") or
-                entry.get("description", "")
-            )
+                description = clean_html(
+                    entry.get("summary", "") or
+                    entry.get("description", "")
+                )
 
-            content = clean_html(
-                entry.get("content", [{}])[0].get("value", "") if entry.get("content") else ""
-            )
+                content = clean_html(
+                    entry.get("content", [{}])[0].get("value", "") if entry.get("content") else ""
+                )
 
-            author = entry.get("author", "")
+                author = entry.get("author", "")
 
-            published = parse_date(
-                entry.get("published", "") or
-                entry.get("pubDate", "") or
-                entry.get("updated", "")
-            )
+                published = parse_date(
+                    entry.get("published", "") or
+                    entry.get("pubDate", "") or
+                    entry.get("updated", "")
+                )
 
-            # Calcular prioridade
-            score, matched = calculate_priority(
-                title, description, positive_keywords, negative_keywords
-            )
+                # Calcular prioridade
+                score, matched = calculate_priority(
+                    title, description, positive_keywords, negative_keywords
+                )
 
-            # Ignorar notícias com score negativo
-            if score < 0:
-                stats["skipped_count"] += 1
-                continue
+                # Ignorar notícias com score negativo
+                if score < 0:
+                    stats["skipped_count"] += 1
+                    continue
 
-            # Inserir no banco
-            news_id = insert_news(
-                source_id=source["id"],
-                title=title,
-                link=link,
-                description=description,
-                content=content,
-                author=author,
-                published_at=published,
-                priority_score=score,
-                matched_keywords=matched
-            )
+                # Inserir no banco
+                news_id = insert_news(
+                    source_id=source["id"],
+                    title=title,
+                    link=link,
+                    description=description,
+                    content=content,
+                    author=author,
+                    published_at=published,
+                    priority_score=score,
+                    matched_keywords=matched
+                )
 
-            if news_id:
-                stats["new_count"] += 1
+                if news_id:
+                    stats["new_count"] += 1
 
-        stats["success"] = True
+            stats["success"] = True
 
-    except Exception as e:
-        stats["error"] = str(e)
+        except RetryError as e:
+            stats["error"] = f"Falhou após {MAX_RETRIES} tentativas: {e.last_exception}"
+            logger.warning(f"Feed {source['name']}: {stats['error']}")
+        except Exception as e:
+            stats["error"] = str(e)
+            logger.warning(f"Feed {source['name']}: {stats['error']}")
 
-    # Calcular duração
-    duration_ms = int((time.time() - start_time) * 1000)
+        # Atualizar estatísticas da fonte
+        update_source_fetch(
+            source_id=source["id"],
+            success=stats["success"],
+            news_count=stats["new_count"],
+            error_message=stats["error"],
+            duration_ms=timer.elapsed_ms
+        )
 
-    # Atualizar estatísticas da fonte
-    update_source_fetch(
-        source_id=source["id"],
-        success=stats["success"],
-        news_count=stats["new_count"],
-        error_message=stats["error"],
-        duration_ms=duration_ms
-    )
-
-    return stats
+        return stats
 
 
 def fetch_all_sources(category: str = None) -> list:

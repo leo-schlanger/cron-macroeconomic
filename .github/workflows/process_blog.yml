@@ -9,10 +9,34 @@ on:
         description: 'Número de notícias para processar'
         required: false
         default: '10'
+      skip_tests:
+        description: 'Pular testes'
+        type: boolean
+        default: false
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.skip_tests != 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest tests/ -v --tb=short
+
   process:
     runs-on: ubuntu-latest
+    needs: [test]
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
 
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -27,17 +51,17 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Instalar dependências
+      - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Inicializar tabelas de blog
+      - name: Initialize blog tables
         run: python processor.py init
 
-      - name: Adicionar notícias de alta prioridade à fila
+      - name: Queue high priority news
         run: python processor.py queue --min-score 4.0 --limit 20
 
-      - name: Processar notícias
+      - name: Process news
         run: python processor.py process --limit ${{ github.event.inputs.limit || '10' }}
 
-      - name: Estatísticas
+      - name: Show statistics
         run: python processor.py stats

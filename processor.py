@@ -8,7 +8,7 @@ import os
 import re
 import json
 import requests
-from typing import Optional, Tuple
+from typing import Optional
 from datetime import datetime
 
 from database_blog import (
@@ -17,6 +17,8 @@ from database_blog import (
 )
 from database_supabase import get_connection, is_postgres
 from deduplication import deduplicate_news_for_blog
+from utils import retry, logger, RetryError
+from html_parser import extract_image_from_content as extract_image_html
 
 # APIs disponíveis
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -24,38 +26,35 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 
 # Configuração
 AI_PROVIDER = os.getenv("AI_PROVIDER", "openai")  # openai ou anthropic
+MAX_API_RETRIES = 3
 
 
 def extract_image_from_content(content: str, link: str) -> Optional[str]:
-    """Extrai URL de imagem do conteúdo ou página."""
-    # Tentar extrair de tags img no conteúdo
-    img_pattern = r'<img[^>]+src=["\']([^"\']+)["\']'
-    matches = re.findall(img_pattern, content)
-    if matches:
-        return matches[0]
-
-    # Tentar extrair og:image da página original
+    """
+    Extrai URL de imagem do conteúdo ou página.
+    Usa BeautifulSoup para parsing robusto.
+    """
+    # Tentar buscar página original para og:image
+    page_html = None
     try:
         headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(link, headers=headers, timeout=10)
-        og_pattern = r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']'
-        og_matches = re.findall(og_pattern, response.text)
-        if og_matches:
-            return og_matches[0]
-
-        # Tentar twitter:image
-        twitter_pattern = r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']'
-        twitter_matches = re.findall(twitter_pattern, response.text)
-        if twitter_matches:
-            return twitter_matches[0]
-    except:
+        page_html = response.text
+    except (requests.RequestException, ValueError, AttributeError):
         pass
 
-    return None
+    # Usar parser robusto
+    return extract_image_html(content, page_html)
 
 
-def rewrite_with_openai(title: str, content: str, source_name: str) -> Tuple[dict, dict]:
-    """Reescreve notícia usando OpenAI GPT-4."""
+@retry(
+    max_attempts=MAX_API_RETRIES,
+    delay=2.0,
+    backoff=2.0,
+    exceptions=(requests.exceptions.RequestException, requests.exceptions.Timeout)
+)
+def rewrite_with_openai(title: str, content: str, source_name: str) -> dict:
+    """Reescreve notícia usando OpenAI GPT-4 com retry automático."""
     if not OPENAI_API_KEY:
         raise Exception("OPENAI_API_KEY não configurada")
 
@@ -110,8 +109,14 @@ RESPONDA EM JSON:
     return content_json
 
 
+@retry(
+    max_attempts=MAX_API_RETRIES,
+    delay=2.0,
+    backoff=2.0,
+    exceptions=(requests.exceptions.RequestException, requests.exceptions.Timeout)
+)
 def rewrite_with_anthropic(title: str, content: str, source_name: str) -> dict:
-    """Reescreve notícia usando Claude."""
+    """Reescreve notícia usando Claude com retry automático."""
     if not ANTHROPIC_API_KEY:
         raise Exception("ANTHROPIC_API_KEY não configurada")
 
@@ -198,7 +203,7 @@ def rewrite_news(title: str, content: str, source_name: str) -> dict:
 def process_single_news(news: dict) -> bool:
     """Processa uma única notícia."""
     try:
-        print(f"  Processando: {news['title'][:50]}...")
+        logger.info(f"Processando: {news['title'][:50]}...")
 
         # Combinar título e descrição para contexto
         full_content = f"{news.get('description', '')} {news.get('content', '')}"
@@ -235,11 +240,16 @@ def process_single_news(news: dict) -> bool:
 
         # Atualizar fila
         update_queue_status(news["queue_id"], "completed")
-        print(f"    ✓ Post #{post_id} criado")
+        logger.info(f"  Post #{post_id} criado com sucesso")
         return True
 
+    except RetryError as e:
+        error_msg = f"Falhou após {MAX_API_RETRIES} tentativas: {e.last_exception}"
+        logger.error(f"  Erro: {error_msg[:80]}")
+        update_queue_status(news["queue_id"], "error", error_msg)
+        return False
     except Exception as e:
-        print(f"    ✗ Erro: {str(e)[:50]}")
+        logger.error(f"  Erro: {str(e)[:80]}")
         update_queue_status(news["queue_id"], "error", str(e))
         return False
 
@@ -247,35 +257,36 @@ def process_single_news(news: dict) -> bool:
 def queue_high_priority_news(min_score: float = 4.0, limit: int = 20):
     """Adiciona notícias de alta prioridade à fila de processamento."""
     conn = get_connection()
+    try:
+        if is_postgres():
+            from psycopg2.extras import RealDictCursor
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute("""
+                SELECT n.id
+                FROM news n
+                LEFT JOIN processing_queue pq ON n.id = pq.news_id
+                WHERE n.priority_score >= %s
+                AND pq.id IS NULL
+                AND n.is_processed = FALSE
+                ORDER BY n.priority_score DESC
+                LIMIT %s
+            """, (min_score, limit))
+        else:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT n.id
+                FROM news n
+                LEFT JOIN processing_queue pq ON n.id = pq.news_id
+                WHERE n.priority_score >= ?
+                AND pq.id IS NULL
+                AND n.is_processed = 0
+                ORDER BY n.priority_score DESC
+                LIMIT ?
+            """, (min_score, limit))
 
-    if is_postgres():
-        from psycopg2.extras import RealDictCursor
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("""
-            SELECT n.id
-            FROM news n
-            LEFT JOIN processing_queue pq ON n.id = pq.news_id
-            WHERE n.priority_score >= %s
-            AND pq.id IS NULL
-            AND n.is_processed = FALSE
-            ORDER BY n.priority_score DESC
-            LIMIT %s
-        """, (min_score, limit))
-    else:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT n.id
-            FROM news n
-            LEFT JOIN processing_queue pq ON n.id = pq.news_id
-            WHERE n.priority_score >= ?
-            AND pq.id IS NULL
-            AND n.is_processed = 0
-            ORDER BY n.priority_score DESC
-            LIMIT ?
-        """, (min_score, limit))
-
-    rows = cursor.fetchall()
-    conn.close()
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
 
     count = 0
     for row in rows:
@@ -289,26 +300,26 @@ def queue_high_priority_news(min_score: float = 4.0, limit: int = 20):
 
 def process_queue(limit: int = 10):
     """Processa notícias da fila."""
-    print(f"\n{'='*50}")
-    print("PROCESSAMENTO DE NOTÍCIAS PARA BLOG")
-    print(f"{'='*50}\n")
+    logger.info("=" * 50)
+    logger.info("PROCESSAMENTO DE NOTÍCIAS PARA BLOG")
+    logger.info("=" * 50)
 
     # Verificar API
     if not OPENAI_API_KEY and not ANTHROPIC_API_KEY:
-        print("ERRO: Configure OPENAI_API_KEY ou ANTHROPIC_API_KEY")
+        logger.error("ERRO: Configure OPENAI_API_KEY ou ANTHROPIC_API_KEY")
         return
 
     provider = "Anthropic" if AI_PROVIDER == "anthropic" else "OpenAI"
-    print(f"Usando: {provider}")
+    logger.info(f"Usando: {provider}")
 
     # Pegar notícias pendentes
     pending = get_pending_news(limit * 2)  # Pegar mais para compensar duplicatas
-    print(f"Notícias na fila: {len(pending)}")
+    logger.info(f"Notícias na fila: {len(pending)}")
 
     # Deduplicar antes de processar
     pending = deduplicate_news_for_blog(pending)
     pending = pending[:limit]  # Limitar após deduplicação
-    print(f"Após deduplicação: {len(pending)}\n")
+    logger.info(f"Após deduplicação: {len(pending)}")
 
     success = 0
     errors = 0
@@ -319,9 +330,9 @@ def process_queue(limit: int = 10):
         else:
             errors += 1
 
-    print(f"\n{'='*50}")
-    print(f"Concluído: {success} sucesso, {errors} erros")
-    print(f"{'='*50}")
+    logger.info("=" * 50)
+    logger.info(f"Concluído: {success} sucesso, {errors} erros")
+    logger.info("=" * 50)
 
 
 def main():

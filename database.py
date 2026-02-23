@@ -186,26 +186,30 @@ def load_keywords_from_json():
 def get_active_sources() -> list:
     """Retorna todas as fontes ativas."""
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM sources WHERE is_active = 1")
-    sources = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return sources
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM sources WHERE is_active = 1")
+        sources = [dict(row) for row in cursor.fetchall()]
+        return sources
+    finally:
+        conn.close()
 
 
 def get_keywords() -> tuple[list, list]:
     """Retorna keywords positivas e negativas."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    cursor.execute("SELECT keyword FROM keywords WHERE is_negative = 0")
-    positive = [row["keyword"] for row in cursor.fetchall()]
+        cursor.execute("SELECT keyword FROM keywords WHERE is_negative = 0")
+        positive = [row["keyword"] for row in cursor.fetchall()]
 
-    cursor.execute("SELECT keyword FROM keywords WHERE is_negative = 1")
-    negative = [row["keyword"] for row in cursor.fetchall()]
+        cursor.execute("SELECT keyword FROM keywords WHERE is_negative = 1")
+        negative = [row["keyword"] for row in cursor.fetchall()]
 
-    conn.close()
-    return positive, negative
+        return positive, negative
+    finally:
+        conn.close()
 
 
 def insert_news(source_id: int, title: str, link: str, description: str = None,
@@ -213,9 +217,8 @@ def insert_news(source_id: int, title: str, link: str, description: str = None,
                 priority_score: float = 0, matched_keywords: list = None) -> Optional[int]:
     """Insere uma notícia no banco de dados."""
     conn = get_connection()
-    cursor = conn.cursor()
-
     try:
+        cursor = conn.cursor()
         cursor.execute("""
             INSERT OR IGNORE INTO news
             (source_id, title, link, description, content, author, published_at, priority_score, matched_keywords)
@@ -232,91 +235,95 @@ def insert_news(source_id: int, title: str, link: str, description: str = None,
             json.dumps(matched_keywords) if matched_keywords else None
         ))
         conn.commit()
-        news_id = cursor.lastrowid if cursor.rowcount > 0 else None
-        conn.close()
-        return news_id
-    except Exception as e:
+        return cursor.lastrowid if cursor.rowcount > 0 else None
+    except sqlite3.Error as e:
         print(f"Erro ao inserir notícia: {e}")
-        conn.close()
         return None
+    finally:
+        conn.close()
 
 
 def update_source_fetch(source_id: int, success: bool, news_count: int = 0,
                         error_message: str = None, duration_ms: int = 0):
     """Atualiza estatísticas de fetch de uma fonte."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    if success:
+        if success:
+            cursor.execute("""
+                UPDATE sources
+                SET last_fetch = CURRENT_TIMESTAMP, fetch_count = fetch_count + 1
+                WHERE id = ?
+            """, (source_id,))
+        else:
+            cursor.execute("""
+                UPDATE sources
+                SET error_count = error_count + 1
+                WHERE id = ?
+            """, (source_id,))
+
         cursor.execute("""
-            UPDATE sources
-            SET last_fetch = CURRENT_TIMESTAMP, fetch_count = fetch_count + 1
-            WHERE id = ?
-        """, (source_id,))
-    else:
-        cursor.execute("""
-            UPDATE sources
-            SET error_count = error_count + 1
-            WHERE id = ?
-        """, (source_id,))
+            INSERT INTO fetch_logs (source_id, status, news_count, error_message, duration_ms)
+            VALUES (?, ?, ?, ?, ?)
+        """, (source_id, "success" if success else "error", news_count, error_message, duration_ms))
 
-    cursor.execute("""
-        INSERT INTO fetch_logs (source_id, status, news_count, error_message, duration_ms)
-        VALUES (?, ?, ?, ?, ?)
-    """, (source_id, "success" if success else "error", news_count, error_message, duration_ms))
-
-    conn.commit()
-    conn.close()
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def get_unprocessed_news(limit: int = 100) -> list:
     """Retorna notícias não processadas ordenadas por prioridade."""
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT n.*, s.name as source_name, s.category
-        FROM news n
-        JOIN sources s ON n.source_id = s.id
-        WHERE n.is_processed = 0
-        ORDER BY n.priority_score DESC, n.published_at DESC
-        LIMIT ?
-    """, (limit,))
-    news = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return news
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT n.*, s.name as source_name, s.category
+            FROM news n
+            JOIN sources s ON n.source_id = s.id
+            WHERE n.is_processed = 0
+            ORDER BY n.priority_score DESC, n.published_at DESC
+            LIMIT ?
+        """, (limit,))
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
 
 
 def get_news_stats() -> dict:
     """Retorna estatísticas do banco de dados."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    stats = {}
+        stats = {}
 
-    cursor.execute("SELECT COUNT(*) as total FROM sources")
-    stats["total_sources"] = cursor.fetchone()["total"]
+        cursor.execute("SELECT COUNT(*) as total FROM sources")
+        stats["total_sources"] = cursor.fetchone()["total"]
 
-    cursor.execute("SELECT COUNT(*) as total FROM sources WHERE is_active = 1")
-    stats["active_sources"] = cursor.fetchone()["total"]
+        cursor.execute("SELECT COUNT(*) as total FROM sources WHERE is_active = 1")
+        stats["active_sources"] = cursor.fetchone()["total"]
 
-    cursor.execute("SELECT COUNT(*) as total FROM news")
-    stats["total_news"] = cursor.fetchone()["total"]
+        cursor.execute("SELECT COUNT(*) as total FROM news")
+        stats["total_news"] = cursor.fetchone()["total"]
 
-    cursor.execute("SELECT COUNT(*) as total FROM news WHERE is_processed = 0")
-    stats["unprocessed_news"] = cursor.fetchone()["total"]
+        cursor.execute("SELECT COUNT(*) as total FROM news WHERE is_processed = 0")
+        stats["unprocessed_news"] = cursor.fetchone()["total"]
 
-    cursor.execute("SELECT COUNT(*) as total FROM news WHERE is_published_blog = 1")
-    stats["published_blog"] = cursor.fetchone()["total"]
+        cursor.execute("SELECT COUNT(*) as total FROM news WHERE is_published_blog = 1")
+        stats["published_blog"] = cursor.fetchone()["total"]
 
-    cursor.execute("""
-        SELECT category, COUNT(*) as count
-        FROM sources
-        GROUP BY category
-    """)
-    stats["sources_by_category"] = {row["category"]: row["count"] for row in cursor.fetchall()}
+        cursor.execute("""
+            SELECT category, COUNT(*) as count
+            FROM sources
+            GROUP BY category
+        """)
+        stats["sources_by_category"] = {row["category"]: row["count"] for row in cursor.fetchall()}
 
-    conn.close()
-    return stats
+        return stats
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

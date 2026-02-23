@@ -194,60 +194,62 @@ def init_blog_tables():
 def add_to_processing_queue(news_id: int) -> int:
     """Adiciona notícia à fila de processamento."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    if is_postgres():
-        cursor.execute("""
-            INSERT INTO processing_queue (news_id, status)
-            VALUES (%s, 'pending')
-            ON CONFLICT DO NOTHING
-            RETURNING id
-        """, (news_id,))
-        result = cursor.fetchone()
-        queue_id = result[0] if result else None
-    else:
-        cursor.execute("""
-            INSERT OR IGNORE INTO processing_queue (news_id, status)
-            VALUES (?, 'pending')
-        """, (news_id,))
-        queue_id = cursor.lastrowid
+        if is_postgres():
+            cursor.execute("""
+                INSERT INTO processing_queue (news_id, status)
+                VALUES (%s, 'pending')
+                ON CONFLICT DO NOTHING
+                RETURNING id
+            """, (news_id,))
+            result = cursor.fetchone()
+            queue_id = result[0] if result else None
+        else:
+            cursor.execute("""
+                INSERT OR IGNORE INTO processing_queue (news_id, status)
+                VALUES (?, 'pending')
+            """, (news_id,))
+            queue_id = cursor.lastrowid
 
-    conn.commit()
-    conn.close()
-    return queue_id
+        conn.commit()
+        return queue_id
+    finally:
+        conn.close()
 
 
 def get_pending_news(limit: int = 10) -> list:
     """Retorna notícias pendentes para processamento."""
     conn = get_connection()
+    try:
+        if is_postgres():
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute("""
+                SELECT n.*, s.name as source_name, s.category, pq.id as queue_id
+                FROM processing_queue pq
+                JOIN news n ON pq.news_id = n.id
+                JOIN sources s ON n.source_id = s.id
+                WHERE pq.status = 'pending'
+                ORDER BY n.priority_score DESC
+                LIMIT %s
+            """, (limit,))
+        else:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT n.*, s.name as source_name, s.category, pq.id as queue_id
+                FROM processing_queue pq
+                JOIN news n ON pq.news_id = n.id
+                JOIN sources s ON n.source_id = s.id
+                WHERE pq.status = 'pending'
+                ORDER BY n.priority_score DESC
+                LIMIT ?
+            """, (limit,))
 
-    if is_postgres():
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("""
-            SELECT n.*, s.name as source_name, s.category, pq.id as queue_id
-            FROM processing_queue pq
-            JOIN news n ON pq.news_id = n.id
-            JOIN sources s ON n.source_id = s.id
-            WHERE pq.status = 'pending'
-            ORDER BY n.priority_score DESC
-            LIMIT %s
-        """, (limit,))
-    else:
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT n.*, s.name as source_name, s.category, pq.id as queue_id
-            FROM processing_queue pq
-            JOIN news n ON pq.news_id = n.id
-            JOIN sources s ON n.source_id = s.id
-            WHERE pq.status = 'pending'
-            ORDER BY n.priority_score DESC
-            LIMIT ?
-        """, (limit,))
-
-    rows = cursor.fetchall()
-    news = [dict(row) for row in rows] if rows else []
-    conn.close()
-    return news
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows] if rows else []
+    finally:
+        conn.close()
 
 
 def save_blog_post(
@@ -267,109 +269,113 @@ def save_blog_post(
 ) -> int:
     """Salva post do blog processado."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    # Gerar slugs
-    slug_pt = generate_slug(title_pt)
-    slug_en = generate_slug(title_en)
+        # Gerar slugs
+        slug_pt = generate_slug(title_pt)
+        slug_en = generate_slug(title_en)
 
-    tags_str = json.dumps(tags) if tags else None
+        tags_str = json.dumps(tags) if tags else None
 
-    if is_postgres():
-        cursor.execute("""
-            INSERT INTO blog_posts (
+        if is_postgres():
+            cursor.execute("""
+                INSERT INTO blog_posts (
+                    news_id, title_pt, slug_pt, content_pt, summary_pt,
+                    title_en, slug_en, content_en, summary_en,
+                    image_url, source_url, source_name, category, tags, priority_score,
+                    meta_description_pt, meta_description_en,
+                    status, published_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    'published', NOW()
+                ) RETURNING id
+            """, (
                 news_id, title_pt, slug_pt, content_pt, summary_pt,
                 title_en, slug_en, content_en, summary_en,
-                image_url, source_url, source_name, category, tags, priority_score,
-                meta_description_pt, meta_description_en,
-                status, published_at
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                'published', NOW()
-            ) RETURNING id
-        """, (
-            news_id, title_pt, slug_pt, content_pt, summary_pt,
-            title_en, slug_en, content_en, summary_en,
-            image_url, source_url, source_name, category, tags_str, priority_score,
-            summary_pt[:160] if summary_pt else None,
-            summary_en[:160] if summary_en else None
-        ))
-        post_id = cursor.fetchone()[0]
-    else:
-        cursor.execute("""
-            INSERT INTO blog_posts (
+                image_url, source_url, source_name, category, tags_str, priority_score,
+                summary_pt[:160] if summary_pt else None,
+                summary_en[:160] if summary_en else None
+            ))
+            post_id = cursor.fetchone()[0]
+        else:
+            cursor.execute("""
+                INSERT INTO blog_posts (
+                    news_id, title_pt, slug_pt, content_pt, summary_pt,
+                    title_en, slug_en, content_en, summary_en,
+                    image_url, source_url, source_name, category, tags, priority_score,
+                    meta_description_pt, meta_description_en
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
                 news_id, title_pt, slug_pt, content_pt, summary_pt,
                 title_en, slug_en, content_en, summary_en,
-                image_url, source_url, source_name, category, tags, priority_score,
-                meta_description_pt, meta_description_en
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            news_id, title_pt, slug_pt, content_pt, summary_pt,
-            title_en, slug_en, content_en, summary_en,
-            image_url, source_url, source_name, category, tags_str, priority_score,
-            summary_pt[:160] if summary_pt else None,
-            summary_en[:160] if summary_en else None
-        ))
-        post_id = cursor.lastrowid
+                image_url, source_url, source_name, category, tags_str, priority_score,
+                summary_pt[:160] if summary_pt else None,
+                summary_en[:160] if summary_en else None
+            ))
+            post_id = cursor.lastrowid
 
-    conn.commit()
-    conn.close()
-    return post_id
+        conn.commit()
+        return post_id
+    finally:
+        conn.close()
 
 
 def update_queue_status(queue_id: int, status: str, error_message: str = None):
     """Atualiza status na fila de processamento."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    if is_postgres():
-        cursor.execute("""
-            UPDATE processing_queue
-            SET status = %s, error_message = %s, processed_at = CURRENT_TIMESTAMP
-            WHERE id = %s
-        """, (status, error_message, queue_id))
-    else:
-        cursor.execute("""
-            UPDATE processing_queue
-            SET status = ?, error_message = ?, processed_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        """, (status, error_message, queue_id))
+        if is_postgres():
+            cursor.execute("""
+                UPDATE processing_queue
+                SET status = %s, error_message = %s, processed_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+            """, (status, error_message, queue_id))
+        else:
+            cursor.execute("""
+                UPDATE processing_queue
+                SET status = ?, error_message = ?, processed_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (status, error_message, queue_id))
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def get_blog_posts(status: str = None, limit: int = 50) -> list:
     """Retorna posts do blog."""
     conn = get_connection()
-
-    if is_postgres():
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        if status:
-            cursor.execute("""
-                SELECT * FROM blog_posts WHERE status = %s
-                ORDER BY created_at DESC LIMIT %s
-            """, (status, limit))
+    try:
+        if is_postgres():
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            if status:
+                cursor.execute("""
+                    SELECT * FROM blog_posts WHERE status = %s
+                    ORDER BY created_at DESC LIMIT %s
+                """, (status, limit))
+            else:
+                cursor.execute("""
+                    SELECT * FROM blog_posts ORDER BY created_at DESC LIMIT %s
+                """, (limit,))
         else:
-            cursor.execute("""
-                SELECT * FROM blog_posts ORDER BY created_at DESC LIMIT %s
-            """, (limit,))
-    else:
-        cursor = conn.cursor()
-        if status:
-            cursor.execute("""
-                SELECT * FROM blog_posts WHERE status = ?
-                ORDER BY created_at DESC LIMIT ?
-            """, (status, limit))
-        else:
-            cursor.execute("""
-                SELECT * FROM blog_posts ORDER BY created_at DESC LIMIT ?
-            """, (limit,))
+            cursor = conn.cursor()
+            if status:
+                cursor.execute("""
+                    SELECT * FROM blog_posts WHERE status = ?
+                    ORDER BY created_at DESC LIMIT ?
+                """, (status, limit))
+            else:
+                cursor.execute("""
+                    SELECT * FROM blog_posts ORDER BY created_at DESC LIMIT ?
+                """, (limit,))
 
-    rows = cursor.fetchall()
-    posts = [dict(row) for row in rows] if rows else []
-    conn.close()
-    return posts
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows] if rows else []
+    finally:
+        conn.close()
 
 
 def generate_slug(title: str) -> str:
@@ -394,33 +400,35 @@ def generate_slug(title: str) -> str:
 def get_blog_stats() -> dict:
     """Retorna estatísticas do blog."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    stats = {}
+        stats = {}
 
-    cursor.execute("SELECT COUNT(*) FROM blog_posts")
-    stats["total_posts"] = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM blog_posts")
+        stats["total_posts"] = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM blog_posts WHERE status = 'draft'")
-    stats["drafts"] = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM blog_posts WHERE status = 'draft'")
+        stats["drafts"] = cursor.fetchone()[0]
 
-    if is_postgres():
-        cursor.execute("SELECT COUNT(*) FROM blog_posts WHERE is_published = TRUE")
-    else:
-        cursor.execute("SELECT COUNT(*) FROM blog_posts WHERE is_published = 1")
-    stats["published"] = cursor.fetchone()[0]
+        if is_postgres():
+            cursor.execute("SELECT COUNT(*) FROM blog_posts WHERE is_published = TRUE")
+        else:
+            cursor.execute("SELECT COUNT(*) FROM blog_posts WHERE is_published = 1")
+        stats["published"] = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM processing_queue WHERE status = 'pending'")
-    stats["pending_processing"] = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM processing_queue WHERE status = 'pending'")
+        stats["pending_processing"] = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM processing_queue WHERE status = 'completed'")
-    stats["processed"] = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM processing_queue WHERE status = 'completed'")
+        stats["processed"] = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM processing_queue WHERE status = 'error'")
-    stats["errors"] = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM processing_queue WHERE status = 'error'")
+        stats["errors"] = cursor.fetchone()[0]
 
-    conn.close()
-    return stats
+        return stats
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

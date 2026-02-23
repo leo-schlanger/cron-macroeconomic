@@ -183,6 +183,7 @@ def is_duplicate(new_title: str, new_desc: str,
 def get_recent_titles_for_dedup(conn, hours: int = 48) -> List[dict]:
     """
     Busca títulos recentes para verificação de duplicatas.
+    Nota: A conexão é gerenciada pelo chamador.
     """
     from database_supabase import is_postgres
 
@@ -192,7 +193,7 @@ def get_recent_titles_for_dedup(conn, hours: int = 48) -> List[dict]:
         cursor.execute("""
             SELECT id, title, description
             FROM news
-            WHERE fetched_at > NOW() - INTERVAL '%s hours'
+            WHERE fetched_at > NOW() - INTERVAL '1 hour' * %s
             ORDER BY fetched_at DESC
             LIMIT 1000
         """, (hours,))

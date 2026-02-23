@@ -298,39 +298,41 @@ def load_keywords_from_json():
 def get_active_sources() -> list:
     """Retorna todas as fontes ativas."""
     conn = get_connection()
-
-    if is_postgres():
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
-        cursor.execute("SELECT * FROM sources WHERE is_active = TRUE")
-        sources = cursor.fetchall()
-    else:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM sources WHERE is_active = 1")
-        sources = [dict(row) for row in cursor.fetchall()]
-
-    conn.close()
-    return sources
+    try:
+        if is_postgres():
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor.execute("SELECT * FROM sources WHERE is_active = TRUE")
+            sources = cursor.fetchall()
+        else:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM sources WHERE is_active = 1")
+            sources = [dict(row) for row in cursor.fetchall()]
+        return sources
+    finally:
+        conn.close()
 
 
 def get_keywords() -> tuple:
     """Retorna keywords positivas e negativas."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    if is_postgres():
-        cursor.execute("SELECT keyword FROM keywords WHERE is_negative = FALSE")
-    else:
-        cursor.execute("SELECT keyword FROM keywords WHERE is_negative = 0")
-    positive = [row[0] for row in cursor.fetchall()]
+        if is_postgres():
+            cursor.execute("SELECT keyword FROM keywords WHERE is_negative = FALSE")
+        else:
+            cursor.execute("SELECT keyword FROM keywords WHERE is_negative = 0")
+        positive = [row[0] for row in cursor.fetchall()]
 
-    if is_postgres():
-        cursor.execute("SELECT keyword FROM keywords WHERE is_negative = TRUE")
-    else:
-        cursor.execute("SELECT keyword FROM keywords WHERE is_negative = 1")
-    negative = [row[0] for row in cursor.fetchall()]
+        if is_postgres():
+            cursor.execute("SELECT keyword FROM keywords WHERE is_negative = TRUE")
+        else:
+            cursor.execute("SELECT keyword FROM keywords WHERE is_negative = 1")
+        negative = [row[0] for row in cursor.fetchall()]
 
-    conn.close()
-    return positive, negative
+        return positive, negative
+    finally:
+        conn.close()
 
 
 def insert_news(source_id: int, title: str, link: str, description: str = None,
@@ -338,9 +340,8 @@ def insert_news(source_id: int, title: str, link: str, description: str = None,
                 priority_score: float = 0, matched_keywords: list = None) -> Optional[int]:
     """Insere uma notícia no banco de dados."""
     conn = get_connection()
-    cursor = conn.cursor()
-
     try:
+        cursor = conn.cursor()
         kw_json = json.dumps(matched_keywords) if matched_keywords else None
 
         if is_postgres():
@@ -363,118 +364,124 @@ def insert_news(source_id: int, title: str, link: str, description: str = None,
             news_id = cursor.lastrowid if cursor.rowcount > 0 else None
 
         conn.commit()
-        conn.close()
         return news_id
-    except Exception as e:
+    except (psycopg2.Error if HAS_POSTGRES else Exception) as e:
         print(f"Erro ao inserir notícia: {e}")
-        conn.close()
         return None
+    finally:
+        conn.close()
 
 
 def update_source_fetch(source_id: int, success: bool, news_count: int = 0,
                         error_message: str = None, duration_ms: int = 0):
     """Atualiza estatísticas de fetch de uma fonte."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    if is_postgres():
-        if success:
+        if is_postgres():
+            if success:
+                cursor.execute("""
+                    UPDATE sources
+                    SET last_fetch = CURRENT_TIMESTAMP, fetch_count = fetch_count + 1
+                    WHERE id = %s
+                """, (source_id,))
+            else:
+                cursor.execute("""
+                    UPDATE sources SET error_count = error_count + 1 WHERE id = %s
+                """, (source_id,))
+
             cursor.execute("""
-                UPDATE sources
-                SET last_fetch = CURRENT_TIMESTAMP, fetch_count = fetch_count + 1
-                WHERE id = %s
-            """, (source_id,))
+                INSERT INTO fetch_logs (source_id, status, news_count, error_message, duration_ms)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (source_id, "success" if success else "error", news_count, error_message, duration_ms))
         else:
-            cursor.execute("""
-                UPDATE sources SET error_count = error_count + 1 WHERE id = %s
-            """, (source_id,))
+            if success:
+                cursor.execute("""
+                    UPDATE sources
+                    SET last_fetch = CURRENT_TIMESTAMP, fetch_count = fetch_count + 1
+                    WHERE id = ?
+                """, (source_id,))
+            else:
+                cursor.execute("""
+                    UPDATE sources SET error_count = error_count + 1 WHERE id = ?
+                """, (source_id,))
 
-        cursor.execute("""
-            INSERT INTO fetch_logs (source_id, status, news_count, error_message, duration_ms)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (source_id, "success" if success else "error", news_count, error_message, duration_ms))
-    else:
-        if success:
             cursor.execute("""
-                UPDATE sources
-                SET last_fetch = CURRENT_TIMESTAMP, fetch_count = fetch_count + 1
-                WHERE id = ?
-            """, (source_id,))
-        else:
-            cursor.execute("""
-                UPDATE sources SET error_count = error_count + 1 WHERE id = ?
-            """, (source_id,))
+                INSERT INTO fetch_logs (source_id, status, news_count, error_message, duration_ms)
+                VALUES (?, ?, ?, ?, ?)
+            """, (source_id, "success" if success else "error", news_count, error_message, duration_ms))
 
-        cursor.execute("""
-            INSERT INTO fetch_logs (source_id, status, news_count, error_message, duration_ms)
-            VALUES (?, ?, ?, ?, ?)
-        """, (source_id, "success" if success else "error", news_count, error_message, duration_ms))
-
-    conn.commit()
-    conn.close()
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def get_news_stats() -> dict:
     """Retorna estatísticas do banco de dados."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    stats = {}
+        stats = {}
 
-    cursor.execute("SELECT COUNT(*) FROM sources")
-    stats["total_sources"] = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM sources")
+        stats["total_sources"] = cursor.fetchone()[0]
 
-    if is_postgres():
-        cursor.execute("SELECT COUNT(*) FROM sources WHERE is_active = TRUE")
-    else:
-        cursor.execute("SELECT COUNT(*) FROM sources WHERE is_active = 1")
-    stats["active_sources"] = cursor.fetchone()[0]
+        if is_postgres():
+            cursor.execute("SELECT COUNT(*) FROM sources WHERE is_active = TRUE")
+        else:
+            cursor.execute("SELECT COUNT(*) FROM sources WHERE is_active = 1")
+        stats["active_sources"] = cursor.fetchone()[0]
 
-    cursor.execute("SELECT COUNT(*) FROM news")
-    stats["total_news"] = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM news")
+        stats["total_news"] = cursor.fetchone()[0]
 
-    if is_postgres():
-        cursor.execute("SELECT COUNT(*) FROM news WHERE is_processed = FALSE")
-    else:
-        cursor.execute("SELECT COUNT(*) FROM news WHERE is_processed = 0")
-    stats["unprocessed_news"] = cursor.fetchone()[0]
+        if is_postgres():
+            cursor.execute("SELECT COUNT(*) FROM news WHERE is_processed = FALSE")
+        else:
+            cursor.execute("SELECT COUNT(*) FROM news WHERE is_processed = 0")
+        stats["unprocessed_news"] = cursor.fetchone()[0]
 
-    if is_postgres():
-        cursor.execute("SELECT COUNT(*) FROM news WHERE is_published_blog = TRUE")
-    else:
-        cursor.execute("SELECT COUNT(*) FROM news WHERE is_published_blog = 1")
-    stats["published_blog"] = cursor.fetchone()[0]
+        if is_postgres():
+            cursor.execute("SELECT COUNT(*) FROM news WHERE is_published_blog = TRUE")
+        else:
+            cursor.execute("SELECT COUNT(*) FROM news WHERE is_published_blog = 1")
+        stats["published_blog"] = cursor.fetchone()[0]
 
-    cursor.execute("SELECT category, COUNT(*) FROM sources GROUP BY category")
-    stats["sources_by_category"] = {row[0]: row[1] for row in cursor.fetchall()}
+        cursor.execute("SELECT category, COUNT(*) FROM sources GROUP BY category")
+        stats["sources_by_category"] = {row[0]: row[1] for row in cursor.fetchall()}
 
-    conn.close()
-    return stats
+        return stats
+    finally:
+        conn.close()
 
 
 def cleanup_old_news(days: int = 30):
     """Remove notícias antigas."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    if is_postgres():
-        cursor.execute("""
-            DELETE FROM news
-            WHERE fetched_at < CURRENT_TIMESTAMP - INTERVAL '%s days'
-            AND is_published_blog = FALSE
-        """, (days,))
-    else:
-        cursor.execute("""
-            DELETE FROM news
-            WHERE fetched_at < datetime('now', ?)
-            AND is_published_blog = 0
-        """, (f"-{days} days",))
+        if is_postgres():
+            cursor.execute("""
+                DELETE FROM news
+                WHERE fetched_at < CURRENT_TIMESTAMP - INTERVAL '1 day' * %s
+                AND is_published_blog = FALSE
+            """, (days,))
+        else:
+            cursor.execute("""
+                DELETE FROM news
+                WHERE fetched_at < datetime('now', ?)
+                AND is_published_blog = 0
+            """, (f"-{days} days",))
 
-    deleted = cursor.rowcount
-    conn.commit()
-    conn.close()
-    print(f"[DB] {deleted} notícias antigas removidas")
-    return deleted
+        deleted = cursor.rowcount
+        conn.commit()
+        print(f"[DB] {deleted} notícias antigas removidas")
+        return deleted
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":
