@@ -7,13 +7,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import sqlite3
+
 try:
     import psycopg2
     from psycopg2.extras import RealDictCursor
     HAS_POSTGRES = True
 except ImportError:
     HAS_POSTGRES = False
-    import sqlite3
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 LOCAL_DB_PATH = Path(__file__).parent / "news.db"
@@ -427,6 +428,52 @@ def get_blog_stats() -> dict:
         stats["errors"] = cursor.fetchone()[0]
 
         return stats
+    finally:
+        conn.close()
+
+
+def delete_posts_by_category(category: str) -> int:
+    """Deleta posts de uma categoria específica."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+
+        if is_postgres():
+            cursor.execute("""
+                DELETE FROM blog_posts WHERE category = %s
+                RETURNING id
+            """, (category,))
+            deleted = cursor.rowcount
+        else:
+            cursor.execute("SELECT COUNT(*) FROM blog_posts WHERE category = ?", (category,))
+            deleted = cursor.fetchone()[0]
+            cursor.execute("DELETE FROM blog_posts WHERE category = ?", (category,))
+
+        conn.commit()
+        return deleted
+    finally:
+        conn.close()
+
+
+def delete_posts_by_source_name_pattern(pattern: str) -> int:
+    """Deleta posts cujo source_name contém o padrão."""
+    conn = get_connection()
+    try:
+        cursor = conn.cursor()
+
+        if is_postgres():
+            cursor.execute("""
+                DELETE FROM blog_posts WHERE source_name ILIKE %s
+                RETURNING id
+            """, (f"%{pattern}%",))
+            deleted = cursor.rowcount
+        else:
+            cursor.execute("SELECT COUNT(*) FROM blog_posts WHERE source_name LIKE ?", (f"%{pattern}%",))
+            deleted = cursor.fetchone()[0]
+            cursor.execute("DELETE FROM blog_posts WHERE source_name LIKE ?", (f"%{pattern}%",))
+
+        conn.commit()
+        return deleted
     finally:
         conn.close()
 

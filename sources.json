@@ -419,12 +419,31 @@
       ]
     },
     "filter_out": {
-      "description": "Palavras para ignorar - notícias de baixo impacto",
+      "description": "Palavras para ignorar - notícias de baixo impacto ou conteúdo não-econômico",
       "terms": [
         "meme coin", "NFT drop", "airdrop", "giveaway", "price prediction",
         "technical analysis", "análise técnica", "moon", "pump", "shitcoin",
         "celebrity", "influencer", "memecoin", "solana meme", "pepe",
         "doge", "shiba", "1000x", "gem alert"
+      ],
+      "conflicts_violence": [
+        "massacre", "massacro", "genocide", "genocídio", "ethnic cleansing",
+        "settlers attack", "colonos atacam", "prisoners tortured", "prisioneiros torturados",
+        "military strike", "ataque militar", "air strike", "bombardeio",
+        "civilian casualties", "vítimas civis", "killed in attack", "mortos em ataque",
+        "hostage", "refém", "reféns", "kidnapped", "sequestrado",
+        "terrorist attack", "ataque terrorista", "terrorism", "terrorismo",
+        "war crimes", "crimes de guerra", "human rights abuse", "abuso de direitos humanos",
+        "sexual violence", "violência sexual", "torture", "tortura",
+        "mass shooting", "tiroteio em massa", "armed conflict", "conflito armado",
+        "ethnic violence", "violência étnica", "religious persecution", "perseguição religiosa",
+        "forced displacement", "deslocamento forçado", "refugee crisis", "crise de refugiados",
+        "execution", "execução", "beheading", "decapitação",
+        "prison abuse", "abuso prisional", "safari em prisão",
+        "soldiers killed", "soldados mortos", "troops killed", "tropas mortas",
+        "airstrike", "drone strike", "ataque de drone",
+        "civilian deaths", "mortes de civis", "children killed", "crianças mortas",
+        "hospital bombed", "hospital bombardeado", "school attacked", "escola atacada"
       ]
     }
   }

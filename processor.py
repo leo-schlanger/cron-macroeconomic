@@ -58,7 +58,7 @@ def rewrite_with_openai(title: str, content: str, source_name: str) -> dict:
     if not OPENAI_API_KEY:
         raise Exception("OPENAI_API_KEY não configurada")
 
-    prompt = f"""Você é um jornalista especializado em economia e criptomoedas.
+    prompt = f"""Você é um jornalista econômico especializado em macroeconomia e mercados financeiros.
 Reescreva a notícia abaixo em um formato de artigo de blog profissional.
 
 NOTÍCIA ORIGINAL:
@@ -66,13 +66,22 @@ Título: {title}
 Fonte: {source_name}
 Conteúdo: {content[:2000]}
 
-INSTRUÇÕES:
+INSTRUÇÕES OBRIGATÓRIAS:
 1. Reescreva completamente com suas próprias palavras (não copie)
 2. Mantenha os fatos e dados importantes
-3. Use tom profissional mas acessível
+3. Use tom profissional, objetivo e factual
 4. Estruture com parágrafos claros
-5. Crie um título atrativo
+5. Crie um título informativo e neutro
 6. Gere um resumo de 2-3 frases
+
+DIRETRIZES DE IMPARCIALIDADE:
+- Seja ESTRITAMENTE IMPARCIAL politicamente - não tome partido em conflitos
+- Foque APENAS nos impactos econômicos e de mercado
+- NÃO use linguagem emotiva ou sensacionalista
+- NÃO faça julgamentos morais sobre países, governos ou grupos
+- Apresente fatos de forma equilibrada, citando múltiplas perspectivas quando relevante
+- Evite termos carregados como "terrorista", "regime", "colonizador" - use termos neutros
+- Se a notícia envolver conflitos, foque APENAS nas consequências econômicas (preço do petróleo, mercados, sanções, comércio)
 
 RESPONDA EM JSON:
 {{
@@ -120,7 +129,7 @@ def rewrite_with_anthropic(title: str, content: str, source_name: str) -> dict:
     if not ANTHROPIC_API_KEY:
         raise Exception("ANTHROPIC_API_KEY não configurada")
 
-    prompt = f"""Você é um jornalista especializado em economia e criptomoedas.
+    prompt = f"""Você é um jornalista econômico especializado em macroeconomia e mercados financeiros.
 Reescreva a notícia abaixo em um formato de artigo de blog profissional.
 
 NOTÍCIA ORIGINAL:
@@ -128,13 +137,22 @@ Título: {title}
 Fonte: {source_name}
 Conteúdo: {content[:2000]}
 
-INSTRUÇÕES:
+INSTRUÇÕES OBRIGATÓRIAS:
 1. Reescreva completamente com suas próprias palavras (não copie)
 2. Mantenha os fatos e dados importantes
-3. Use tom profissional mas acessível
+3. Use tom profissional, objetivo e factual
 4. Estruture com parágrafos claros
-5. Crie um título atrativo
+5. Crie um título informativo e neutro
 6. Gere um resumo de 2-3 frases
+
+DIRETRIZES DE IMPARCIALIDADE:
+- Seja ESTRITAMENTE IMPARCIAL politicamente - não tome partido em conflitos
+- Foque APENAS nos impactos econômicos e de mercado
+- NÃO use linguagem emotiva ou sensacionalista
+- NÃO faça julgamentos morais sobre países, governos ou grupos
+- Apresente fatos de forma equilibrada, citando múltiplas perspectivas quando relevante
+- Evite termos carregados como "terrorista", "regime", "colonizador" - use termos neutros
+- Se a notícia envolver conflitos, foque APENAS nas consequências econômicas (preço do petróleo, mercados, sanções, comércio)
 
 RESPONDA APENAS EM JSON (sem markdown):
 {{

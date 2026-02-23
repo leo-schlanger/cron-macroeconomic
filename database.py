@@ -178,6 +178,18 @@ def load_keywords_from_json():
         except Exception as e:
             print(f"Erro ao inserir keyword negativa {term}: {e}")
 
+    # Keywords de conflitos/violência (filtro negativo forte)
+    for term in filter_out.get("conflicts_violence", []):
+        try:
+            cursor.execute("""
+                INSERT OR IGNORE INTO keywords (keyword, category, weight, is_negative)
+                VALUES (?, ?, ?, ?)
+            """, (term.lower(), "conflicts", -1.0, True))
+            if cursor.rowcount > 0:
+                count += 1
+        except Exception as e:
+            print(f"Erro ao inserir keyword de conflito {term}: {e}")
+
     conn.commit()
     conn.close()
     print(f"{count} keywords carregadas no banco de dados.")

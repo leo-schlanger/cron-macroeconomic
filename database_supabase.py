@@ -290,6 +290,25 @@ def load_keywords_from_json():
         except Exception as e:
             print(f"Erro keyword negativa {term}: {e}")
 
+    # Keywords de conflitos/violência (filtro negativo forte)
+    for term in filter_out.get("conflicts_violence", []):
+        try:
+            if is_postgres():
+                cursor.execute("""
+                    INSERT INTO keywords (keyword, category, weight, is_negative)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (keyword) DO NOTHING
+                """, (term.lower(), "conflicts", -1.0, True))
+            else:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO keywords (keyword, category, weight, is_negative)
+                    VALUES (?, ?, ?, ?)
+                """, (term.lower(), "conflicts", -1.0, 1))
+            if cursor.rowcount > 0:
+                count += 1
+        except Exception as e:
+            print(f"Erro keyword de conflito {term}: {e}")
+
     conn.commit()
     conn.close()
     print(f"[DB] {count} keywords carregadas")
