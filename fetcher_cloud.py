@@ -37,7 +37,8 @@ def get_recent_titles_cached():
        (now - _cache_time).seconds > 300:
         conn = get_connection()
         try:
-            _recent_titles_cache = get_recent_titles_for_dedup(conn, hours=72)
+            # Otimização: 24h é suficiente para dedup (era 72h)
+            _recent_titles_cache = get_recent_titles_for_dedup(conn, hours=24)
         finally:
             conn.close()
         _cache_time = now

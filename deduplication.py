@@ -180,38 +180,39 @@ def is_duplicate(new_title: str, new_desc: str,
     return None
 
 
-def get_recent_titles_for_dedup(conn, hours: int = 48) -> List[dict]:
+def get_recent_titles_for_dedup(conn, hours: int = 24) -> List[dict]:
     """
     Busca títulos recentes para verificação de duplicatas.
+    Otimizado para reduzir egress: busca apenas id e title, limite reduzido.
     Nota: A conexão é gerenciada pelo chamador.
     """
     from database_supabase import is_postgres
 
     cursor = conn.cursor()
 
+    # Otimização: busca apenas title (não description) e limite menor
     if is_postgres():
         cursor.execute("""
-            SELECT id, title, description
+            SELECT id, title
             FROM news
             WHERE fetched_at > NOW() - INTERVAL '1 hour' * %s
             ORDER BY fetched_at DESC
-            LIMIT 1000
+            LIMIT 300
         """, (hours,))
     else:
         cursor.execute("""
-            SELECT id, title, description
+            SELECT id, title
             FROM news
             WHERE fetched_at > datetime('now', ?)
             ORDER BY fetched_at DESC
-            LIMIT 1000
+            LIMIT 300
         """, (f'-{hours} hours',))
 
     rows = cursor.fetchall()
 
-    # Converter para lista de dicts
+    # Converter para lista de dicts (description vazia para compatibilidade)
     if rows:
-        columns = ['id', 'title', 'description']
-        return [dict(zip(columns, row)) for row in rows]
+        return [{'id': row[0], 'title': row[1], 'description': ''} for row in rows]
 
     return []
 
