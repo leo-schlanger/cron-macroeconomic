@@ -76,10 +76,11 @@ def setup():
 
 
 def cleanup(days: int = 30):
-    """Remove notícias antigas."""
+    """Remove notícias antigas, preservando alto impacto para ML."""
     print(f"Removendo notícias com mais de {days} dias...")
-    deleted = cleanup_old_news(days)
-    print(f"Removidas: {deleted} notícias")
+    print(f"(Preservando: blog posts e artigos com priority_score >= 4.0 para ML)")
+    deleted = cleanup_old_news(days, preserve_high_priority=True)
+    print(f"\nTotal removidas: {deleted} notícias")
 
 
 def main():

@@ -476,29 +476,69 @@ def get_news_stats() -> dict:
         conn.close()
 
 
-def cleanup_old_news(days: int = 30):
-    """Remove notícias antigas."""
+def cleanup_old_news(days: int = 30, preserve_high_priority: bool = True):
+    """Remove notícias antigas, preservando artigos de alto impacto para ML.
+
+    Args:
+        days: Dias de retenção para artigos normais
+        preserve_high_priority: Se True, preserva artigos com priority_score >= 4.0 para ML
+    """
     conn = get_connection()
     try:
         cursor = conn.cursor()
 
+        # Cleanup de notícias antigas (preserva publicadas e alto impacto para ML)
+        if is_postgres():
+            if preserve_high_priority:
+                cursor.execute("""
+                    DELETE FROM news
+                    WHERE fetched_at < CURRENT_TIMESTAMP - INTERVAL '1 day' * %s
+                    AND is_published_blog = FALSE
+                    AND priority_score < 4.0
+                """, (days,))
+            else:
+                cursor.execute("""
+                    DELETE FROM news
+                    WHERE fetched_at < CURRENT_TIMESTAMP - INTERVAL '1 day' * %s
+                    AND is_published_blog = FALSE
+                """, (days,))
+        else:
+            if preserve_high_priority:
+                cursor.execute("""
+                    DELETE FROM news
+                    WHERE fetched_at < datetime('now', ?)
+                    AND is_published_blog = 0
+                    AND priority_score < 4.0
+                """, (f"-{days} days",))
+            else:
+                cursor.execute("""
+                    DELETE FROM news
+                    WHERE fetched_at < datetime('now', ?)
+                    AND is_published_blog = 0
+                """, (f"-{days} days",))
+
+        deleted_news = cursor.rowcount
+
+        # Cleanup de fetch_logs (sempre limpa, não tem valor histórico)
         if is_postgres():
             cursor.execute("""
-                DELETE FROM news
-                WHERE fetched_at < CURRENT_TIMESTAMP - INTERVAL '1 day' * %s
-                AND is_published_blog = FALSE
+                DELETE FROM fetch_logs
+                WHERE created_at < CURRENT_TIMESTAMP - INTERVAL '1 day' * %s
             """, (days,))
         else:
             cursor.execute("""
-                DELETE FROM news
-                WHERE fetched_at < datetime('now', ?)
-                AND is_published_blog = 0
+                DELETE FROM fetch_logs
+                WHERE created_at < datetime('now', ?)
             """, (f"-{days} days",))
 
-        deleted = cursor.rowcount
+        deleted_logs = cursor.rowcount
+
         conn.commit()
-        print(f"[DB] {deleted} notícias antigas removidas")
-        return deleted
+        print(f"[DB] {deleted_news} notícias antigas removidas")
+        print(f"[DB] {deleted_logs} logs de fetch removidos")
+        if preserve_high_priority:
+            print(f"[DB] Artigos com priority_score >= 4.0 preservados para ML")
+        return deleted_news
     finally:
         conn.close()
 
