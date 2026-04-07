@@ -59,20 +59,27 @@ def rewrite_with_openai(title: str, content: str, source_name: str) -> dict:
         raise Exception("OPENAI_API_KEY não configurada")
 
     prompt = f"""Você é um jornalista econômico especializado em macroeconomia e mercados financeiros.
-Reescreva a notícia abaixo em um formato de artigo de blog profissional.
+Com base nos FATOS da notícia abaixo, escreva um artigo ORIGINAL de blog com sua própria análise e estrutura.
 
-NOTÍCIA ORIGINAL:
+FATOS DA NOTÍCIA (apenas como referência factual):
 Título: {title}
 Fonte: {source_name}
 Conteúdo: {content[:2000]}
 
-INSTRUÇÕES OBRIGATÓRIAS:
-1. Reescreva completamente com suas próprias palavras (não copie)
-2. Mantenha os fatos e dados importantes
-3. Use tom profissional, objetivo e factual
-4. Estruture com parágrafos claros
-5. Crie um título informativo e neutro
-6. Gere um resumo de 2-3 frases
+INSTRUÇÕES DE ORIGINALIDADE (CRÍTICO):
+1. NÃO copie frases, estrutura ou parágrafos da notícia original
+2. Crie uma estrutura e narrativa completamente novas
+3. Use vocabulário e construções frasais diferentes do original
+4. Adicione contexto macroeconômico relevante (ex: como isso se conecta a tendências globais)
+5. Crie um título original que NÃO seja tradução ou paráfrase direta do original
+6. O artigo deve funcionar de forma independente - um leitor não precisa ler a fonte original
+7. Inclua ao final do conteúdo uma linha de atribuição: "Fonte original: {source_name}"
+
+INSTRUÇÕES DE FORMATO:
+1. Estruture com 3-5 parágrafos bem desenvolvidos
+2. Use tom profissional, objetivo e factual
+3. Gere um resumo de 2-3 frases
+4. Crie 3-5 tags relevantes
 
 DIRETRIZES DE IMPARCIALIDADE:
 - Seja ESTRITAMENTE IMPARCIAL politicamente - não tome partido em conflitos
@@ -85,11 +92,11 @@ DIRETRIZES DE IMPARCIALIDADE:
 
 RESPONDA EM JSON:
 {{
-    "title_pt": "título em português",
-    "content_pt": "conteúdo completo em português (3-5 parágrafos)",
+    "title_pt": "título original em português",
+    "content_pt": "conteúdo original em português (3-5 parágrafos, com atribuição ao final)",
     "summary_pt": "resumo em português",
-    "title_en": "title in English",
-    "content_en": "full content in English (3-5 paragraphs)",
+    "title_en": "original title in English",
+    "content_en": "original content in English (3-5 paragraphs, with attribution at the end)",
     "summary_en": "summary in English",
     "tags": ["tag1", "tag2", "tag3"]
 }}"""
@@ -130,20 +137,27 @@ def rewrite_with_anthropic(title: str, content: str, source_name: str) -> dict:
         raise Exception("ANTHROPIC_API_KEY não configurada")
 
     prompt = f"""Você é um jornalista econômico especializado em macroeconomia e mercados financeiros.
-Reescreva a notícia abaixo em um formato de artigo de blog profissional.
+Com base nos FATOS da notícia abaixo, escreva um artigo ORIGINAL de blog com sua própria análise e estrutura.
 
-NOTÍCIA ORIGINAL:
+FATOS DA NOTÍCIA (apenas como referência factual):
 Título: {title}
 Fonte: {source_name}
 Conteúdo: {content[:2000]}
 
-INSTRUÇÕES OBRIGATÓRIAS:
-1. Reescreva completamente com suas próprias palavras (não copie)
-2. Mantenha os fatos e dados importantes
-3. Use tom profissional, objetivo e factual
-4. Estruture com parágrafos claros
-5. Crie um título informativo e neutro
-6. Gere um resumo de 2-3 frases
+INSTRUÇÕES DE ORIGINALIDADE (CRÍTICO):
+1. NÃO copie frases, estrutura ou parágrafos da notícia original
+2. Crie uma estrutura e narrativa completamente novas
+3. Use vocabulário e construções frasais diferentes do original
+4. Adicione contexto macroeconômico relevante (ex: como isso se conecta a tendências globais)
+5. Crie um título original que NÃO seja tradução ou paráfrase direta do original
+6. O artigo deve funcionar de forma independente - um leitor não precisa ler a fonte original
+7. Inclua ao final do conteúdo uma linha de atribuição: "Fonte original: {source_name}"
+
+INSTRUÇÕES DE FORMATO:
+1. Estruture com 3-5 parágrafos bem desenvolvidos
+2. Use tom profissional, objetivo e factual
+3. Gere um resumo de 2-3 frases
+4. Crie 3-5 tags relevantes
 
 DIRETRIZES DE IMPARCIALIDADE:
 - Seja ESTRITAMENTE IMPARCIAL politicamente - não tome partido em conflitos
@@ -156,11 +170,11 @@ DIRETRIZES DE IMPARCIALIDADE:
 
 RESPONDA APENAS EM JSON (sem markdown):
 {{
-    "title_pt": "título em português",
-    "content_pt": "conteúdo completo em português (3-5 parágrafos)",
+    "title_pt": "título original em português",
+    "content_pt": "conteúdo original em português (3-5 parágrafos, com atribuição ao final)",
     "summary_pt": "resumo em português",
-    "title_en": "title in English",
-    "content_en": "full content in English (3-5 paragraphs)",
+    "title_en": "original title in English",
+    "content_en": "original content in English (3-5 paragraphs, with attribution at the end)",
     "summary_en": "summary in English",
     "tags": ["tag1", "tag2", "tag3"]
 }}"""

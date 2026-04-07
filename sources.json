@@ -78,9 +78,14 @@
         "focus": ["markets", "economy", "commodities"]
       },
       {
-        "name": "Barrons",
-        "url": "https://www.barrons.com/market-data/rss",
+        "name": "New York Times Economy",
+        "url": "https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml",
         "focus": ["markets", "economy", "analysis"]
+      },
+      {
+        "name": "Financial Times",
+        "url": "https://www.ft.com/rss/home",
+        "focus": ["markets", "economy", "global_finance"]
       }
     ]
   },
@@ -112,10 +117,16 @@
         "region": "asia"
       },
       {
-        "name": "Reserve Bank of Australia",
-        "url": "https://www.rba.gov.au/rss/rss-cb-media-releases.xml",
-        "focus": ["rba", "aud", "policy"],
-        "region": "oceania"
+        "name": "Reserve Bank of India",
+        "url": "https://rbi.org.in/pressreleases_rss.xml",
+        "focus": ["rbi", "inr", "policy"],
+        "region": "asia"
+      },
+      {
+        "name": "Reserve Bank of India - Notifications",
+        "url": "https://rbi.org.in/notifications_rss.xml",
+        "focus": ["rbi", "regulation", "forex"],
+        "region": "asia"
       },
       {
         "name": "Bank of Canada",
@@ -125,7 +136,7 @@
       },
       {
         "name": "Swiss National Bank",
-        "url": "https://www.snb.ch/en/service/rss/news",
+        "url": "https://www.snb.ch/public/en/rss/news",
         "focus": ["snb", "chf", "policy"],
         "region": "europe"
       }
@@ -170,10 +181,10 @@
         "country": "Germany"
       },
       {
-        "name": "France24 Business",
-        "url": "https://www.france24.com/en/business/rss",
-        "focus": ["france", "europe", "economy"],
-        "country": "France"
+        "name": "Politico EU",
+        "url": "https://www.politico.eu/feed/",
+        "focus": ["eu", "europe", "policy"],
+        "country": "EU"
       }
     ]
   },
@@ -229,8 +240,8 @@
         "country": "Singapore"
       },
       {
-        "name": "Yonhap News Economy",
-        "url": "https://en.yna.co.kr/RSS/economy.xml",
+        "name": "Korea Herald Business",
+        "url": "https://www.koreaherald.com/rss/kh_Business",
         "focus": ["korea", "economy", "trade"],
         "country": "South Korea"
       }
@@ -258,8 +269,8 @@
         "country": "UK/ME"
       },
       {
-        "name": "Khaleej Times Business",
-        "url": "https://www.khaleejtimes.com/rss/business",
+        "name": "Gulf Business",
+        "url": "https://gulfbusiness.com/feed/",
         "focus": ["uae", "gulf", "economy"],
         "country": "UAE"
       }
@@ -291,8 +302,8 @@
         "focus": ["africa", "politics", "economy"]
       },
       {
-        "name": "IOL Business (South Africa)",
-        "url": "https://www.iol.co.za/cmlink/business-1.8",
+        "name": "Daily Maverick (South Africa)",
+        "url": "https://www.dailymaverick.co.za/dmrss/",
         "focus": ["south_africa", "economy", "markets"],
         "country": "South Africa"
       }
@@ -326,9 +337,16 @@
         "country": "Brazil"
       },
       {
-        "name": "BNamericas",
-        "url": "https://www.bnamericas.com/en/rss",
-        "focus": ["latam", "economy", "infrastructure"]
+        "name": "Valor Econômico",
+        "url": "https://pox.globo.com/rss/valor/",
+        "focus": ["brazil", "markets", "finance"],
+        "country": "Brazil"
+      },
+      {
+        "name": "Exame (Brazil)",
+        "url": "https://exame.com/feed/",
+        "focus": ["brazil", "economy", "markets"],
+        "country": "Brazil"
       },
       {
         "name": "MercoPress",
@@ -383,11 +401,85 @@
         "name": "Seeking Alpha Commodities",
         "url": "https://seekingalpha.com/tag/commodities.xml",
         "focus": ["commodities", "analysis", "markets"]
+      }
+    ]
+  },
+  "data_statistics": {
+    "description": "Agências de dados e indicadores econômicos oficiais",
+    "feeds": [
+      {
+        "name": "US Bureau of Economic Analysis (BEA)",
+        "url": "https://apps.bea.gov/rss/rss.xml",
+        "focus": ["gdp", "trade_balance", "economic_data"],
+        "country": "USA"
       },
       {
-        "name": "Platts",
-        "url": "https://www.spglobal.com/commodityinsights/en/rss-feed",
-        "focus": ["commodities", "energy", "prices"]
+        "name": "US Census Bureau Economic Indicators",
+        "url": "https://www.census.gov/economic-indicators/indicator.xml",
+        "focus": ["retail_sales", "housing", "durable_goods"],
+        "country": "USA"
+      },
+      {
+        "name": "US Bureau of Labor Statistics (BLS)",
+        "url": "https://www.bls.gov/feed/bls_latest.rss",
+        "focus": ["cpi", "payrolls", "unemployment"],
+        "country": "USA"
+      },
+      {
+        "name": "ONS UK Statistics",
+        "url": "https://www.ons.gov.uk/releasecalendar?rss",
+        "focus": ["uk_gdp", "cpi", "employment"],
+        "country": "UK"
+      }
+    ]
+  },
+  "forex_rates": {
+    "description": "Forex, câmbio e taxas de juros globais",
+    "feeds": [
+      {
+        "name": "FXStreet News",
+        "url": "https://www.fxstreet.com/rss/news",
+        "focus": ["forex", "central_banks", "rates"]
+      },
+      {
+        "name": "ForexLive (InvestingLive)",
+        "url": "https://investinglive.com/feed",
+        "focus": ["forex", "macro_data", "central_banks"]
+      }
+    ]
+  },
+  "research_think_tanks": {
+    "description": "Think tanks e pesquisa econômica acadêmica",
+    "feeds": [
+      {
+        "name": "BIS Central Bankers Speeches",
+        "url": "https://www.bis.org/doclist/cbspeeches.rss",
+        "focus": ["central_banks", "monetary_policy", "speeches"]
+      },
+      {
+        "name": "NBER Working Papers",
+        "url": "https://back.nber.org/rss/new.xml",
+        "focus": ["research", "economics", "policy"]
+      },
+      {
+        "name": "Bruegel (EU Think Tank)",
+        "url": "https://www.bruegel.org/rss.xml",
+        "focus": ["eu", "fiscal_policy", "trade"]
+      }
+    ]
+  },
+  "supply_chain": {
+    "description": "Cadeia de suprimentos, logística e comércio global",
+    "feeds": [
+      {
+        "name": "FreightWaves",
+        "url": "https://www.freightwaves.com/feed",
+        "focus": ["freight", "logistics", "supply_chain"]
+      },
+      {
+        "name": "Supply Chain Dive",
+        "url": "https://www.supplychaindive.com/feeds/news/",
+        "focus": ["supply_chain", "logistics", "reshoring"]
       }
     ]
   },
