@@ -300,7 +300,7 @@ def queue_high_priority_news(min_score: float = 4.0, limit: int = 20):
                 WHERE n.priority_score >= %s
                 AND pq.id IS NULL
                 AND n.is_processed = FALSE
-                ORDER BY n.priority_score DESC
+                ORDER BY n.priority_score DESC, n.published_at DESC NULLS LAST, n.fetched_at DESC
                 LIMIT %s
             """, (min_score, limit))
         else:
@@ -312,7 +312,7 @@ def queue_high_priority_news(min_score: float = 4.0, limit: int = 20):
                 WHERE n.priority_score >= ?
                 AND pq.id IS NULL
                 AND n.is_processed = 0
-                ORDER BY n.priority_score DESC
+                ORDER BY n.priority_score DESC, n.published_at DESC, n.fetched_at DESC
                 LIMIT ?
             """, (min_score, limit))
 

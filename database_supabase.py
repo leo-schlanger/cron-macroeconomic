@@ -476,26 +476,36 @@ def get_news_stats() -> dict:
         conn.close()
 
 
-def cleanup_old_news(days: int = 30, preserve_high_priority: bool = True):
-    """Remove notícias antigas, preservando artigos de alto impacto para ML.
+def cleanup_old_news(days: int = 30, preserve_high_priority: bool = True, high_priority_days: int = 90):
+    """Remove notícias antigas, preservando artigos de alto impacto para ML por tempo limitado.
 
     Args:
         days: Dias de retenção para artigos normais
         preserve_high_priority: Se True, preserva artigos com priority_score >= 4.0 para ML
+        high_priority_days: Dias de retenção para artigos de alta prioridade (default: 90)
     """
     conn = get_connection()
     try:
         cursor = conn.cursor()
 
-        # Cleanup de notícias antigas (preserva publicadas e alto impacto para ML)
+        # Cleanup de notícias antigas (preserva publicadas e alto impacto para ML por tempo limitado)
         if is_postgres():
             if preserve_high_priority:
+                # Notícias normais: delete após 'days' dias
                 cursor.execute("""
                     DELETE FROM news
                     WHERE fetched_at < CURRENT_TIMESTAMP - INTERVAL '1 day' * %s
                     AND is_published_blog = FALSE
                     AND priority_score < 4.0
                 """, (days,))
+                deleted_normal = cursor.rowcount
+                # Notícias de alta prioridade: delete após 'high_priority_days' dias
+                cursor.execute("""
+                    DELETE FROM news
+                    WHERE fetched_at < CURRENT_TIMESTAMP - INTERVAL '1 day' * %s
+                    AND is_published_blog = FALSE
+                    AND priority_score >= 4.0
+                """, (high_priority_days,))
             else:
                 cursor.execute("""
                     DELETE FROM news
@@ -510,6 +520,13 @@ def cleanup_old_news(days: int = 30, preserve_high_priority: bool = True):
                     AND is_published_blog = 0
                     AND priority_score < 4.0
                 """, (f"-{days} days",))
+                deleted_normal = cursor.rowcount
+                cursor.execute("""
+                    DELETE FROM news
+                    WHERE fetched_at < datetime('now', ?)
+                    AND is_published_blog = 0
+                    AND priority_score >= 4.0
+                """, (f"-{high_priority_days} days",))
             else:
                 cursor.execute("""
                     DELETE FROM news

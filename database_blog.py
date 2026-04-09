@@ -232,7 +232,7 @@ def get_pending_news(limit: int = 10) -> list:
                 JOIN news n ON pq.news_id = n.id
                 JOIN sources s ON n.source_id = s.id
                 WHERE pq.status = 'pending'
-                ORDER BY n.priority_score DESC
+                ORDER BY n.priority_score DESC, n.published_at DESC NULLS LAST, n.fetched_at DESC
                 LIMIT %s
             """, (limit,))
         else:
@@ -243,7 +243,7 @@ def get_pending_news(limit: int = 10) -> list:
                 JOIN news n ON pq.news_id = n.id
                 JOIN sources s ON n.source_id = s.id
                 WHERE pq.status = 'pending'
-                ORDER BY n.priority_score DESC
+                ORDER BY n.priority_score DESC, n.published_at DESC, n.fetched_at DESC
                 LIMIT ?
             """, (limit,))
 

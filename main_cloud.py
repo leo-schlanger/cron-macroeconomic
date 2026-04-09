@@ -32,6 +32,7 @@ def run_fetch(category: str = None, verbose: bool = True):
         print(f"  Notícias encontradas: {summary['total_news']}")
         print(f"  Novas salvas: {summary['new_news']}")
         print(f"  Duplicatas ignoradas: {summary.get('duplicates', 0)}")
+        print(f"  Antigas ignoradas (>72h): {summary.get('stale', 0)}")
         print(f"  Filtradas (keywords): {summary['skipped']}")
 
         if summary['failed'] > 0:
@@ -76,10 +77,10 @@ def setup():
 
 
 def cleanup(days: int = 30):
-    """Remove notícias antigas, preservando alto impacto para ML."""
+    """Remove notícias antigas, preservando alto impacto para ML por tempo limitado."""
     print(f"Removendo notícias com mais de {days} dias...")
-    print(f"(Preservando: blog posts e artigos com priority_score >= 4.0 para ML)")
-    deleted = cleanup_old_news(days, preserve_high_priority=True)
+    print(f"(Preservando: blog posts e artigos com priority_score >= 4.0 até 90 dias)")
+    deleted = cleanup_old_news(days, preserve_high_priority=True, high_priority_days=90)
     print(f"\nTotal removidas: {deleted} notícias")
 
 

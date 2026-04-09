@@ -3,7 +3,7 @@ Fetcher de RSS - Versão Cloud com deduplicação.
 """
 import feedparser
 import requests
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 import time
 from dateutil import parser as date_parser
@@ -20,6 +20,7 @@ from html_parser import clean_html
 REQUEST_TIMEOUT = 15
 USER_AGENT = "MacroNewsCron/1.0"
 MAX_RETRIES = 3
+MAX_NEWS_AGE_HOURS = 72  # Ignorar notícias com mais de 72h
 
 # Cache de títulos recentes para deduplicação
 _recent_titles_cache = None
@@ -122,6 +123,17 @@ def process_feed(source: dict, positive_kw: list, negative_kw: list) -> dict:
                 raise Exception("Feed vazio")
 
             stats["news_count"] = len(feed.entries)
+            stats["stale_count"] = 0
+
+            # Ordenar entries por data (mais recentes primeiro)
+            def entry_date_key(e):
+                d = parse_date(e.get("published") or e.get("pubDate") or e.get("updated"))
+                return d or datetime.min
+
+            feed.entries.sort(key=entry_date_key, reverse=True)
+
+            # Cutoff de freshness: ignorar notícias muito antigas
+            freshness_cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=MAX_NEWS_AGE_HOURS)
 
             # Carregar títulos recentes para deduplicação
             recent_titles = get_recent_titles_cached()
@@ -146,6 +158,13 @@ def process_feed(source: dict, positive_kw: list, negative_kw: list) -> dict:
                 published = parse_date(
                     entry.get("published") or entry.get("pubDate") or entry.get("updated")
                 )
+
+                # Filtrar notícias antigas (freshness check)
+                if published:
+                    pub_aware = published if published.tzinfo else published.replace(tzinfo=timezone.utc)
+                    if pub_aware < freshness_cutoff:
+                        stats["stale_count"] += 1
+                        continue
 
                 score, matched = calculate_priority(title, description, positive_kw, negative_kw)
 
@@ -211,7 +230,8 @@ def fetch_all_sources(category: str = None) -> list:
 
         status = "OK" if result["success"] else "ERRO"
         dup_info = f", {result['duplicate_count']} dup" if result['duplicate_count'] > 0 else ""
-        logger.info(f"  {status} ({result['new_count']} novas{dup_info})")
+        stale_info = f", {result.get('stale_count', 0)} antigas" if result.get('stale_count', 0) > 0 else ""
+        logger.info(f"  {status} ({result['new_count']} novas{dup_info}{stale_info})")
 
         total_duplicates += result['duplicate_count']
         results.append(result)
@@ -230,6 +250,7 @@ def get_fetch_summary(results: list) -> dict:
         "total_news": sum(r["news_count"] for r in results),
         "new_news": sum(r["new_count"] for r in results),
         "skipped": sum(r["skipped_count"] for r in results),
+        "stale": sum(r.get("stale_count", 0) for r in results),
         "duplicates": sum(r.get("duplicate_count", 0) for r in results),
         "errors": [{"source": r["source_name"], "error": r["error"]} for r in results if r["error"]]
     }
