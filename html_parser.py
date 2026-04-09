@@ -12,6 +12,13 @@ except ImportError:
     HAS_BS4 = False
 
 
+def _is_valid_image_url(url: str) -> bool:
+    """Valida que URL de imagem é segura (http/https)."""
+    if not url:
+        return False
+    return url.startswith(('http://', 'https://', '//'))
+
+
 def clean_html(text: str) -> str:
     """
     Remove tags HTML de um texto de forma segura.
@@ -57,17 +64,17 @@ def extract_og_image(html: str) -> Optional[str]:
 
         # Tentar og:image primeiro
         og_tag = soup.find('meta', property='og:image')
-        if og_tag and og_tag.get('content'):
+        if og_tag and og_tag.get('content') and _is_valid_image_url(og_tag['content']):
             return og_tag['content']
 
         # Fallback para twitter:image
         twitter_tag = soup.find('meta', attrs={'name': 'twitter:image'})
-        if twitter_tag and twitter_tag.get('content'):
+        if twitter_tag and twitter_tag.get('content') and _is_valid_image_url(twitter_tag['content']):
             return twitter_tag['content']
 
         # Tentar variações (alguns sites usam name em vez de property)
         og_tag_alt = soup.find('meta', attrs={'name': 'og:image'})
-        if og_tag_alt and og_tag_alt.get('content'):
+        if og_tag_alt and og_tag_alt.get('content') and _is_valid_image_url(og_tag_alt['content']):
             return og_tag_alt['content']
     else:
         # Fallback regex
@@ -80,7 +87,7 @@ def extract_og_image(html: str) -> Optional[str]:
 
         for pattern in patterns:
             match = re.search(pattern, html, re.IGNORECASE)
-            if match:
+            if match and _is_valid_image_url(match.group(1)):
                 return match.group(1)
 
     return None
@@ -102,12 +109,12 @@ def extract_first_image(html: str) -> Optional[str]:
     if HAS_BS4:
         soup = BeautifulSoup(html, 'html.parser')
         img_tag = soup.find('img', src=True)
-        if img_tag:
+        if img_tag and _is_valid_image_url(img_tag['src']):
             return img_tag['src']
     else:
         # Fallback regex
         match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', html, re.IGNORECASE)
-        if match:
+        if match and _is_valid_image_url(match.group(1)):
             return match.group(1)
 
     return None

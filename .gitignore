@@ -29,6 +29,7 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # Working feeds (gerado automaticamente)
 working_feeds.json

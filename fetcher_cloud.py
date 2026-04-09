@@ -22,6 +22,24 @@ USER_AGENT = "MacroNewsCron/1.0"
 MAX_RETRIES = 3
 MAX_NEWS_AGE_HOURS = 72  # Ignorar notícias com mais de 72h
 
+# Peso por categoria de fonte (multiplicador do priority_score)
+SOURCE_CATEGORY_WEIGHT = {
+    "central_banks": 2.0,       # Fontes oficiais de bancos centrais
+    "data_statistics": 1.8,     # Dados econômicos oficiais
+    "macro_global": 1.5,        # Tier-1: Bloomberg, WSJ, FT, Reuters
+    "research_think_tanks": 1.3, # BIS, NBER, Bruegel, OECD
+    "commodities": 1.2,         # Petróleo, metais, mineração
+    "forex_rates": 1.2,         # Câmbio
+    "supply_chain": 1.1,        # Logística
+    "crypto": 1.0,              # Cripto
+    "europe": 1.0,              # Regional
+    "asia": 1.0,
+    "middle_east": 1.0,
+    "africa": 1.0,
+    "latin_america": 1.0,
+    "oceania": 1.0,
+}
+
 # Cache de títulos recentes para deduplicação
 _recent_titles_cache = None
 _cache_time = None
@@ -35,7 +53,7 @@ def get_recent_titles_cached():
 
     # Atualizar cache se expirado ou não existe
     if _recent_titles_cache is None or _cache_time is None or \
-       (now - _cache_time).seconds > 300:
+       (now - _cache_time).total_seconds() > 300:
         conn = get_connection()
         try:
             # Otimização: 24h é suficiente para dedup (era 72h)
@@ -172,6 +190,10 @@ def process_feed(source: dict, positive_kw: list, negative_kw: list) -> dict:
                     stats["skipped_count"] += 1
                     continue
 
+                # Aplicar peso da categoria da fonte
+                source_weight = SOURCE_CATEGORY_WEIGHT.get(source.get("category", ""), 1.0)
+                weighted_score = round(score * source_weight, 2)
+
                 news_id = insert_news(
                     source_id=source["id"],
                     title=title,
@@ -180,7 +202,7 @@ def process_feed(source: dict, positive_kw: list, negative_kw: list) -> dict:
                     content=content,
                     author=entry.get("author", ""),
                     published_at=published,
-                    priority_score=score,
+                    priority_score=weighted_score,
                     matched_keywords=matched
                 )
 

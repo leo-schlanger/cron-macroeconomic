@@ -42,144 +42,151 @@ def is_postgres():
 def init_db():
     """Inicializa o banco de dados com as tabelas necessárias."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    # Sintaxe compatível com PostgreSQL e SQLite
-    if is_postgres():
-        # PostgreSQL
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS sources (
-                id SERIAL PRIMARY KEY,
-                name TEXT NOT NULL,
-                url TEXT UNIQUE NOT NULL,
-                category TEXT NOT NULL,
-                country TEXT,
-                region TEXT,
-                focus TEXT,
-                is_active BOOLEAN DEFAULT TRUE,
-                last_fetch TIMESTAMP,
-                fetch_count INTEGER DEFAULT 0,
-                error_count INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        # Sintaxe compatível com PostgreSQL e SQLite
+        if is_postgres():
+            # PostgreSQL
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sources (
+                    id SERIAL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    url TEXT UNIQUE NOT NULL,
+                    category TEXT NOT NULL,
+                    country TEXT,
+                    region TEXT,
+                    focus TEXT,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    last_fetch TIMESTAMP,
+                    fetch_count INTEGER DEFAULT 0,
+                    error_count INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS news (
-                id SERIAL PRIMARY KEY,
-                source_id INTEGER NOT NULL REFERENCES sources(id),
-                title TEXT NOT NULL,
-                link TEXT UNIQUE NOT NULL,
-                description TEXT,
-                content TEXT,
-                author TEXT,
-                published_at TIMESTAMP,
-                fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                priority_score REAL DEFAULT 0,
-                matched_keywords TEXT,
-                is_processed BOOLEAN DEFAULT FALSE,
-                is_published_blog BOOLEAN DEFAULT FALSE,
-                blog_post_id TEXT
-            )
-        """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS news (
+                    id SERIAL PRIMARY KEY,
+                    source_id INTEGER NOT NULL REFERENCES sources(id),
+                    title TEXT NOT NULL,
+                    link TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    content TEXT,
+                    author TEXT,
+                    published_at TIMESTAMP,
+                    fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    priority_score REAL DEFAULT 0,
+                    matched_keywords TEXT,
+                    is_processed BOOLEAN DEFAULT FALSE,
+                    is_published_blog BOOLEAN DEFAULT FALSE,
+                    blog_post_id TEXT
+                )
+            """)
 
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS keywords (
-                id SERIAL PRIMARY KEY,
-                keyword TEXT UNIQUE NOT NULL,
-                category TEXT NOT NULL,
-                weight REAL DEFAULT 1.0,
-                is_negative BOOLEAN DEFAULT FALSE
-            )
-        """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS keywords (
+                    id SERIAL PRIMARY KEY,
+                    keyword TEXT UNIQUE NOT NULL,
+                    category TEXT NOT NULL,
+                    weight REAL DEFAULT 1.0,
+                    is_negative BOOLEAN DEFAULT FALSE
+                )
+            """)
 
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS fetch_logs (
-                id SERIAL PRIMARY KEY,
-                source_id INTEGER NOT NULL REFERENCES sources(id),
-                status TEXT NOT NULL,
-                news_count INTEGER DEFAULT 0,
-                error_message TEXT,
-                duration_ms INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS fetch_logs (
+                    id SERIAL PRIMARY KEY,
+                    source_id INTEGER NOT NULL REFERENCES sources(id),
+                    status TEXT NOT NULL,
+                    news_count INTEGER DEFAULT 0,
+                    error_message TEXT,
+                    duration_ms INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
-        # Índices
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_published ON news(published_at DESC)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_source ON news(source_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_priority ON news(priority_score DESC)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_processed ON news(is_processed)")
+            # Índices
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_published ON news(published_at DESC)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_source ON news(source_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_priority ON news(priority_score DESC)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_processed ON news(is_processed)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_fetched_at ON news(fetched_at DESC)")
 
-    else:
-        # SQLite
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS sources (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                url TEXT UNIQUE NOT NULL,
-                category TEXT NOT NULL,
-                country TEXT,
-                region TEXT,
-                focus TEXT,
-                is_active INTEGER DEFAULT 1,
-                last_fetch TEXT,
-                fetch_count INTEGER DEFAULT 0,
-                error_count INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
+        else:
+            # SQLite
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sources (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    url TEXT UNIQUE NOT NULL,
+                    category TEXT NOT NULL,
+                    country TEXT,
+                    region TEXT,
+                    focus TEXT,
+                    is_active INTEGER DEFAULT 1,
+                    last_fetch TEXT,
+                    fetch_count INTEGER DEFAULT 0,
+                    error_count INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS news (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                source_id INTEGER NOT NULL,
-                title TEXT NOT NULL,
-                link TEXT UNIQUE NOT NULL,
-                description TEXT,
-                content TEXT,
-                author TEXT,
-                published_at TEXT,
-                fetched_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                priority_score REAL DEFAULT 0,
-                matched_keywords TEXT,
-                is_processed INTEGER DEFAULT 0,
-                is_published_blog INTEGER DEFAULT 0,
-                blog_post_id TEXT,
-                FOREIGN KEY (source_id) REFERENCES sources(id)
-            )
-        """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS news (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_id INTEGER NOT NULL,
+                    title TEXT NOT NULL,
+                    link TEXT UNIQUE NOT NULL,
+                    description TEXT,
+                    content TEXT,
+                    author TEXT,
+                    published_at TEXT,
+                    fetched_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    priority_score REAL DEFAULT 0,
+                    matched_keywords TEXT,
+                    is_processed INTEGER DEFAULT 0,
+                    is_published_blog INTEGER DEFAULT 0,
+                    blog_post_id TEXT,
+                    FOREIGN KEY (source_id) REFERENCES sources(id)
+                )
+            """)
 
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS keywords (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                keyword TEXT UNIQUE NOT NULL,
-                category TEXT NOT NULL,
-                weight REAL DEFAULT 1.0,
-                is_negative INTEGER DEFAULT 0
-            )
-        """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS keywords (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    keyword TEXT UNIQUE NOT NULL,
+                    category TEXT NOT NULL,
+                    weight REAL DEFAULT 1.0,
+                    is_negative INTEGER DEFAULT 0
+                )
+            """)
 
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS fetch_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                source_id INTEGER NOT NULL,
-                status TEXT NOT NULL,
-                news_count INTEGER DEFAULT 0,
-                error_message TEXT,
-                duration_ms INTEGER,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (source_id) REFERENCES sources(id)
-            )
-        """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS fetch_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_id INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    news_count INTEGER DEFAULT 0,
+                    error_message TEXT,
+                    duration_ms INTEGER,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (source_id) REFERENCES sources(id)
+                )
+            """)
 
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_published ON news(published_at)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_source ON news(source_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_priority ON news(priority_score)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_published ON news(published_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_source ON news(source_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_priority ON news(priority_score)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_news_fetched_at ON news(fetched_at)")
 
-    conn.commit()
-    conn.close()
-    print("[DB] Tabelas inicializadas")
+        conn.commit()
+        print("[DB] Tabelas inicializadas")
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def load_sources_from_json():
@@ -190,48 +197,53 @@ def load_sources_from_json():
         data = json.load(f)
 
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    count = 0
-    for category, cat_data in data.items():
-        if category == "keywords" or "feeds" not in cat_data:
-            continue
+        count = 0
+        for category, cat_data in data.items():
+            if category == "keywords" or "feeds" not in cat_data:
+                continue
 
-        for feed in cat_data["feeds"]:
-            try:
-                if is_postgres():
-                    cursor.execute("""
-                        INSERT INTO sources (name, url, category, country, region, focus)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (url) DO NOTHING
-                    """, (
-                        feed["name"],
-                        feed["url"],
-                        category,
-                        feed.get("country"),
-                        feed.get("region"),
-                        json.dumps(feed.get("focus", []))
-                    ))
-                else:
-                    cursor.execute("""
-                        INSERT OR IGNORE INTO sources (name, url, category, country, region, focus)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (
-                        feed["name"],
-                        feed["url"],
-                        category,
-                        feed.get("country"),
-                        feed.get("region"),
-                        json.dumps(feed.get("focus", []))
-                    ))
-                if cursor.rowcount > 0:
-                    count += 1
-            except Exception as e:
-                print(f"Erro ao inserir {feed['name']}: {e}")
+            for feed in cat_data["feeds"]:
+                try:
+                    if is_postgres():
+                        cursor.execute("""
+                            INSERT INTO sources (name, url, category, country, region, focus)
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (url) DO NOTHING
+                        """, (
+                            feed["name"],
+                            feed["url"],
+                            category,
+                            feed.get("country"),
+                            feed.get("region"),
+                            json.dumps(feed.get("focus", []))
+                        ))
+                    else:
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO sources (name, url, category, country, region, focus)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        """, (
+                            feed["name"],
+                            feed["url"],
+                            category,
+                            feed.get("country"),
+                            feed.get("region"),
+                            json.dumps(feed.get("focus", []))
+                        ))
+                    if cursor.rowcount > 0:
+                        count += 1
+                except Exception as e:
+                    print(f"Erro ao inserir {feed['name']}: {e}")
 
-    conn.commit()
-    conn.close()
-    print(f"[DB] {count} fontes carregadas")
+        conn.commit()
+        print(f"[DB] {count} fontes carregadas")
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def load_keywords_from_json():
@@ -243,75 +255,80 @@ def load_keywords_from_json():
 
     keywords_data = data.get("keywords", {})
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    count = 0
+        count = 0
 
-    # Keywords de alta prioridade
-    high_priority = keywords_data.get("high_priority", {})
-    for category, terms in high_priority.items():
-        if category == "description":
-            continue
-        for term in terms:
+        # Keywords de alta prioridade
+        high_priority = keywords_data.get("high_priority", {})
+        for category, terms in high_priority.items():
+            if category == "description":
+                continue
+            for term in terms:
+                try:
+                    if is_postgres():
+                        cursor.execute("""
+                            INSERT INTO keywords (keyword, category, weight, is_negative)
+                            VALUES (%s, %s, %s, %s)
+                            ON CONFLICT (keyword) DO NOTHING
+                        """, (term.lower(), category, 1.0, False))
+                    else:
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO keywords (keyword, category, weight, is_negative)
+                            VALUES (?, ?, ?, ?)
+                        """, (term.lower(), category, 1.0, 0))
+                    if cursor.rowcount > 0:
+                        count += 1
+                except Exception as e:
+                    print(f"Erro keyword {term}: {e}")
+
+        # Keywords negativas
+        filter_out = keywords_data.get("filter_out", {})
+        for term in filter_out.get("terms", []):
             try:
                 if is_postgres():
                     cursor.execute("""
                         INSERT INTO keywords (keyword, category, weight, is_negative)
                         VALUES (%s, %s, %s, %s)
                         ON CONFLICT (keyword) DO NOTHING
-                    """, (term.lower(), category, 1.0, False))
+                    """, (term.lower(), "filter", -1.0, True))
                 else:
                     cursor.execute("""
                         INSERT OR IGNORE INTO keywords (keyword, category, weight, is_negative)
                         VALUES (?, ?, ?, ?)
-                    """, (term.lower(), category, 1.0, 0))
+                    """, (term.lower(), "filter", -1.0, 1))
                 if cursor.rowcount > 0:
                     count += 1
             except Exception as e:
-                print(f"Erro keyword {term}: {e}")
+                print(f"Erro keyword negativa {term}: {e}")
 
-    # Keywords negativas
-    filter_out = keywords_data.get("filter_out", {})
-    for term in filter_out.get("terms", []):
-        try:
-            if is_postgres():
-                cursor.execute("""
-                    INSERT INTO keywords (keyword, category, weight, is_negative)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT (keyword) DO NOTHING
-                """, (term.lower(), "filter", -1.0, True))
-            else:
-                cursor.execute("""
-                    INSERT OR IGNORE INTO keywords (keyword, category, weight, is_negative)
-                    VALUES (?, ?, ?, ?)
-                """, (term.lower(), "filter", -1.0, 1))
-            if cursor.rowcount > 0:
-                count += 1
-        except Exception as e:
-            print(f"Erro keyword negativa {term}: {e}")
+        # Keywords de conflitos/violência (filtro negativo forte)
+        for term in filter_out.get("conflicts_violence", []):
+            try:
+                if is_postgres():
+                    cursor.execute("""
+                        INSERT INTO keywords (keyword, category, weight, is_negative)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (keyword) DO NOTHING
+                    """, (term.lower(), "conflicts", -1.0, True))
+                else:
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO keywords (keyword, category, weight, is_negative)
+                        VALUES (?, ?, ?, ?)
+                    """, (term.lower(), "conflicts", -1.0, 1))
+                if cursor.rowcount > 0:
+                    count += 1
+            except Exception as e:
+                print(f"Erro keyword de conflito {term}: {e}")
 
-    # Keywords de conflitos/violência (filtro negativo forte)
-    for term in filter_out.get("conflicts_violence", []):
-        try:
-            if is_postgres():
-                cursor.execute("""
-                    INSERT INTO keywords (keyword, category, weight, is_negative)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT (keyword) DO NOTHING
-                """, (term.lower(), "conflicts", -1.0, True))
-            else:
-                cursor.execute("""
-                    INSERT OR IGNORE INTO keywords (keyword, category, weight, is_negative)
-                    VALUES (?, ?, ?, ?)
-                """, (term.lower(), "conflicts", -1.0, 1))
-            if cursor.rowcount > 0:
-                count += 1
-        except Exception as e:
-            print(f"Erro keyword de conflito {term}: {e}")
-
-    conn.commit()
-    conn.close()
-    print(f"[DB] {count} keywords carregadas")
+        conn.commit()
+        print(f"[DB] {count} keywords carregadas")
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def get_active_sources() -> list:
@@ -384,7 +401,7 @@ def insert_news(source_id: int, title: str, link: str, description: str = None,
 
         conn.commit()
         return news_id
-    except (psycopg2.Error if HAS_POSTGRES else Exception) as e:
+    except Exception as e:
         print(f"Erro ao inserir notícia: {e}")
         return None
     finally:
@@ -534,7 +551,8 @@ def cleanup_old_news(days: int = 30, preserve_high_priority: bool = True, high_p
                     AND is_published_blog = 0
                 """, (f"-{days} days",))
 
-        deleted_news = cursor.rowcount
+        deleted_high = cursor.rowcount
+        deleted_news = deleted_normal + deleted_high if preserve_high_priority else cursor.rowcount
 
         # Cleanup de fetch_logs (sempre limpa, não tem valor histórico)
         if is_postgres():
@@ -552,9 +570,9 @@ def cleanup_old_news(days: int = 30, preserve_high_priority: bool = True, high_p
 
         conn.commit()
         print(f"[DB] {deleted_news} notícias antigas removidas")
-        print(f"[DB] {deleted_logs} logs de fetch removidos")
         if preserve_high_priority:
-            print(f"[DB] Artigos com priority_score >= 4.0 preservados para ML")
+            print(f"[DB]   (normais: {deleted_normal}, alta prioridade >90d: {deleted_high})")
+        print(f"[DB] {deleted_logs} logs de fetch removidos")
         return deleted_news
     finally:
         conn.close()

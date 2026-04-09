@@ -10,9 +10,14 @@ on:
         required: false
         default: '7'
 
+concurrency:
+  group: cleanup
+  cancel-in-progress: false
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -31,7 +36,12 @@ jobs:
       - name: Cleanup (preserva alto impacto para ML)
         run: |
           DAYS="${{ github.event.inputs.days }}"
-          python main_cloud.py cleanup --days ${DAYS:-7}
+          DAYS="${DAYS:-7}"
+          if ! [[ "$DAYS" =~ ^[0-9]+$ ]]; then
+            echo "Erro: days deve ser um número inteiro positivo"
+            exit 1
+          fi
+          python main_cloud.py cleanup --days "$DAYS"
 
       - name: Estatísticas após cleanup
         run: python main_cloud.py stats

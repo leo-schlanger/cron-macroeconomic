@@ -1,6 +1,7 @@
 """
 Script para visualizar notícias coletadas.
 """
+import json
 import argparse
 from datetime import datetime, timedelta
 from rich.console import Console
@@ -15,77 +16,80 @@ console = Console()
 def get_top_news(limit: int = 20, category: str = None, hours: int = 24) -> list:
     """Retorna as notícias de maior prioridade."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    cutoff = datetime.now() - timedelta(hours=hours)
+        cutoff = datetime.now() - timedelta(hours=hours)
 
-    query = """
-        SELECT n.*, s.name as source_name, s.category
-        FROM news n
-        JOIN sources s ON n.source_id = s.id
-        WHERE n.priority_score > 0
-        AND n.fetched_at > ?
-    """
-    params = [cutoff.isoformat()]
+        query = """
+            SELECT n.*, s.name as source_name, s.category
+            FROM news n
+            JOIN sources s ON n.source_id = s.id
+            WHERE n.priority_score > 0
+            AND n.fetched_at > ?
+        """
+        params = [cutoff.isoformat()]
 
-    if category:
-        query += " AND s.category = ?"
-        params.append(category)
+        if category:
+            query += " AND s.category = ?"
+            params.append(category)
 
-    query += " ORDER BY n.priority_score DESC, n.published_at DESC LIMIT ?"
-    params.append(limit)
+        query += " ORDER BY n.priority_score DESC, n.published_at DESC LIMIT ?"
+        params.append(limit)
 
-    cursor.execute(query, params)
-    news = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return news
+        cursor.execute(query, params)
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
 
 
 def get_news_by_keyword(keyword: str, limit: int = 20) -> list:
     """Busca notícias por palavra-chave."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT n.*, s.name as source_name, s.category
-        FROM news n
-        JOIN sources s ON n.source_id = s.id
-        WHERE (n.title LIKE ? OR n.description LIKE ?)
-        ORDER BY n.published_at DESC
-        LIMIT ?
-    """, (f"%{keyword}%", f"%{keyword}%", limit))
+        cursor.execute("""
+            SELECT n.*, s.name as source_name, s.category
+            FROM news n
+            JOIN sources s ON n.source_id = s.id
+            WHERE (n.title LIKE ? OR n.description LIKE ?)
+            ORDER BY n.published_at DESC
+            LIMIT ?
+        """, (f"%{keyword}%", f"%{keyword}%", limit))
 
-    news = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return news
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
 
 
 def get_recent_news(limit: int = 50, category: str = None) -> list:
     """Retorna as notícias mais recentes."""
     conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        cursor = conn.cursor()
 
-    if category:
-        cursor.execute("""
-            SELECT n.*, s.name as source_name, s.category
-            FROM news n
-            JOIN sources s ON n.source_id = s.id
-            WHERE s.category = ?
-            ORDER BY n.published_at DESC
-            LIMIT ?
-        """, (category, limit))
-    else:
-        cursor.execute("""
-            SELECT n.*, s.name as source_name, s.category
-            FROM news n
-            JOIN sources s ON n.source_id = s.id
-            ORDER BY n.published_at DESC
-            LIMIT ?
-        """, (limit,))
+        if category:
+            cursor.execute("""
+                SELECT n.*, s.name as source_name, s.category
+                FROM news n
+                JOIN sources s ON n.source_id = s.id
+                WHERE s.category = ?
+                ORDER BY n.published_at DESC
+                LIMIT ?
+            """, (category, limit))
+        else:
+            cursor.execute("""
+                SELECT n.*, s.name as source_name, s.category
+                FROM news n
+                JOIN sources s ON n.source_id = s.id
+                ORDER BY n.published_at DESC
+                LIMIT ?
+            """, (limit,))
 
-    news = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return news
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
 
 
 def display_news(news_list: list, title: str = "Notícias"):
@@ -105,11 +109,10 @@ def display_news(news_list: list, title: str = "Notícias"):
         score = f"{n['priority_score']:.1f}" if n['priority_score'] else "-"
         keywords = n.get('matched_keywords', '')
         if keywords and keywords != 'null':
-            import json
             try:
                 kw_list = json.loads(keywords)
                 keywords = ", ".join(kw_list[:3])
-            except:
+            except (json.JSONDecodeError, TypeError):
                 keywords = ""
         else:
             keywords = ""

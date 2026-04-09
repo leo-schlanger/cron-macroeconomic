@@ -86,6 +86,16 @@
         "name": "Financial Times",
         "url": "https://www.ft.com/rss/home",
         "focus": ["markets", "economy", "global_finance"]
+      },
+      {
+        "name": "Reuters Business",
+        "url": "https://www.reutersagency.com/feed/?best-topics=business-finance",
+        "focus": ["breaking", "markets", "economy", "global"]
+      },
+      {
+        "name": "OECD Economy",
+        "url": "https://www.oecd.org/economy/rss.xml",
+        "focus": ["economic_outlook", "policy_analysis", "statistics"]
       }
     ]
   },
@@ -139,6 +149,24 @@
         "url": "https://www.snb.ch/public/en/rss/news",
         "focus": ["snb", "chf", "policy"],
         "region": "europe"
+      },
+      {
+        "name": "Reserve Bank of New Zealand",
+        "url": "https://www.rbnz.govt.nz/rss.xml",
+        "focus": ["rbnz", "nzd", "policy"],
+        "region": "oceania"
+      },
+      {
+        "name": "Reserve Bank of Australia",
+        "url": "https://www.rba.gov.au/rss/rss-cb-media-releases.xml",
+        "focus": ["rba", "aud", "policy"],
+        "region": "oceania"
+      },
+      {
+        "name": "Bank of Mexico",
+        "url": "https://www.banxico.org.mx/informacion-para-la-prensa/comunicados/rss.xml",
+        "focus": ["banxico", "mxn", "policy"],
+        "region": "latin_america"
       }
     ]
   },
@@ -430,6 +458,12 @@
         "url": "https://www.ons.gov.uk/releasecalendar?rss",
         "focus": ["uk_gdp", "cpi", "employment"],
         "country": "UK"
+      },
+      {
+        "name": "Eurostat News",
+        "url": "https://ec.europa.eu/eurostat/web/main/news/euro-indicators?rss",
+        "focus": ["eu_statistics", "gdp", "inflation", "employment"],
+        "country": "EU"
       }
     ]
   },
@@ -500,14 +534,29 @@
         "quantitative easing", "QE", "tapering", "yield curve",
         "treasury", "bonds", "default", "debt ceiling", "teto da dívida",
         "banking crisis", "crise bancária", "liquidity", "liquidez",
-        "CPI", "core inflation", "payroll", "jobs report", "FOMC"
+        "CPI", "core inflation", "payroll", "jobs report", "FOMC",
+        "PPI", "NFP", "non-farm payroll", "PMI", "manufacturing PMI",
+        "services PMI", "ISM", "durable goods", "housing starts",
+        "retail sales", "consumer confidence", "confiança do consumidor",
+        "wage growth", "crescimento salarial", "fiscal policy", "política fiscal",
+        "stimulus", "estímulo", "austerity", "austeridade",
+        "forward guidance", "monetary policy", "política monetária",
+        "credit spread", "credit downgrade", "rebaixamento de crédito",
+        "sovereign debt", "dívida soberana", "VIX", "volatility",
+        "capital flight", "fuga de capitais", "supply shock",
+        "central bank", "banco central", "basis points", "pontos base",
+        "balance sheet", "balanço patrimonial", "current account", "conta corrente"
       ],
       "geopolitical": [
         "sanctions", "sanções", "trade war", "guerra comercial",
         "tariff", "tarifa", "embargo", "BRICS", "G7", "G20",
         "IMF", "FMI", "World Bank", "Banco Mundial", "oil crisis",
         "energy crisis", "supply chain", "cadeia de suprimentos",
-        "de-dollarization", "petrodollar", "currency war"
+        "de-dollarization", "petrodollar", "currency war",
+        "emerging market", "mercado emergente", "capital controls",
+        "controle de capitais", "currency crisis", "crise cambial",
+        "trade deficit", "déficit comercial", "trade surplus",
+        "superávit comercial", "sovereign default", "credit rating"
       ]
     },
     "filter_out": {
@@ -521,19 +570,16 @@
       "conflicts_violence": [
         "massacre", "massacro", "genocide", "genocídio", "ethnic cleansing",
         "settlers attack", "colonos atacam", "prisoners tortured", "prisioneiros torturados",
-        "military strike", "ataque militar", "air strike", "bombardeio",
         "civilian casualties", "vítimas civis", "killed in attack", "mortos em ataque",
         "hostage", "refém", "reféns", "kidnapped", "sequestrado",
-        "terrorist attack", "ataque terrorista", "terrorism", "terrorismo",
         "war crimes", "crimes de guerra", "human rights abuse", "abuso de direitos humanos",
         "sexual violence", "violência sexual", "torture", "tortura",
-        "mass shooting", "tiroteio em massa", "armed conflict", "conflito armado",
+        "mass shooting", "tiroteio em massa",
         "ethnic violence", "violência étnica", "religious persecution", "perseguição religiosa",
-        "forced displacement", "deslocamento forçado", "refugee crisis", "crise de refugiados",
+        "forced displacement", "deslocamento forçado",
         "execution", "execução", "beheading", "decapitação",
-        "prison abuse", "abuso prisional", "safari em prisão",
+        "prison abuse", "abuso prisional",
         "soldiers killed", "soldados mortos", "troops killed", "tropas mortas",
-        "airstrike", "drone strike", "ataque de drone",
         "civilian deaths", "mortes de civis", "children killed", "crianças mortas",
         "hospital bombed", "hospital bombardeado", "school attacked", "escola atacada"
       ]

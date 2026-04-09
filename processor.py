@@ -120,7 +120,13 @@ RESPONDA EM JSON:
         raise Exception(f"OpenAI API error: {response.status_code} - {response.text}")
 
     result = response.json()
-    content_json = json.loads(result["choices"][0]["message"]["content"])
+    choices = result.get("choices", [])
+    if not choices:
+        raise Exception(f"OpenAI retornou resposta sem choices: {result}")
+    message_content = choices[0].get("message", {}).get("content", "")
+    if not message_content:
+        raise Exception("OpenAI retornou mensagem vazia")
+    content_json = json.loads(message_content)
 
     return content_json
 
@@ -183,11 +189,11 @@ RESPONDA APENAS EM JSON (sem markdown):
         "https://api.anthropic.com/v1/messages",
         headers={
             "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
+            "anthropic-version": "2023-06-01",  # Stable API version
             "Content-Type": "application/json"
         },
         json={
-            "model": "claude-3-haiku-20240307",
+            "model": "claude-haiku-4-5-20251001",
             "max_tokens": 2000,
             "messages": [{"role": "user", "content": prompt}]
         },
@@ -198,20 +204,23 @@ RESPONDA APENAS EM JSON (sem markdown):
         raise Exception(f"Anthropic API error: {response.status_code} - {response.text}")
 
     result = response.json()
-    text = result["content"][0]["text"]
+    content_list = result.get("content", [])
+    if not content_list:
+        raise Exception(f"Anthropic retornou resposta sem content: {result}")
+    text = content_list[0].get("text", "")
+    if not text:
+        raise Exception("Anthropic retornou texto vazio")
 
     # Extrair JSON da resposta
     json_match = re.search(r'\{[\s\S]*\}', text)
     if json_match:
         json_str = json_match.group()
         # Remover caracteres de controle inválidos em JSON (exceto \n \r \t que são comuns)
-        # Substituir por espaço para não perder separação de palavras
         json_str = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', ' ', json_str)
         try:
             return json.loads(json_str)
         except json.JSONDecodeError:
-            # Fallback: tentar normalizar quebras de linha dentro de strings JSON
-            # Substitui newlines literais por \n escapado dentro de valores string
+            # Fallback: normalizar quebras de linha dentro de strings JSON
             def fix_string_newlines(m):
                 s = m.group(0)
                 s = s.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
@@ -219,7 +228,7 @@ RESPONDA APENAS EM JSON (sem markdown):
             json_str = re.sub(r'"[^"]*"', fix_string_newlines, json_str)
             return json.loads(json_str)
     else:
-        raise Exception("Não foi possível extrair JSON da resposta")
+        raise Exception(f"Não foi possível extrair JSON da resposta: {text[:200]}")
 
 
 def rewrite_news(title: str, content: str, source_name: str) -> dict:

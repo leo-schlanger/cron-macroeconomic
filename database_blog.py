@@ -117,6 +117,8 @@ def init_blog_tables():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_published ON blog_posts(is_published)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_category ON blog_posts(category)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_queue_status ON processing_queue(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_queue_news_id ON processing_queue(news_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_blog_images_post_id ON blog_images(post_id)")
 
     else:
         # SQLite version
@@ -186,6 +188,14 @@ def init_blog_tables():
                 FOREIGN KEY (news_id) REFERENCES news(id)
             )
         """)
+
+        # Índices SQLite
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_status ON blog_posts(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_published ON blog_posts(is_published)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_blog_posts_category ON blog_posts(category)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_queue_status ON processing_queue(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_processing_queue_news_id ON processing_queue(news_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_blog_images_post_id ON blog_images(post_id)")
 
     conn.commit()
     conn.close()
