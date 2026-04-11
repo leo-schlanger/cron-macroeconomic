@@ -45,8 +45,8 @@ _recent_titles_cache = None
 _cache_time = None
 
 
-def get_recent_titles_cached():
-    """Retorna títulos recentes com cache de 5 minutos."""
+def get_recent_titles_cached(conn=None):
+    """Retorna títulos recentes com cache de 5 minutos. Reutiliza conn se passado."""
     global _recent_titles_cache, _cache_time
 
     now = datetime.now()
@@ -54,12 +54,15 @@ def get_recent_titles_cached():
     # Atualizar cache se expirado ou não existe
     if _recent_titles_cache is None or _cache_time is None or \
        (now - _cache_time).total_seconds() > 300:
-        conn = get_connection()
+        own_conn = conn is None
+        if own_conn:
+            conn = get_connection()
         try:
             # Otimização: 24h é suficiente para dedup (era 72h)
             _recent_titles_cache = get_recent_titles_for_dedup(conn, hours=24)
         finally:
-            conn.close()
+            if own_conn:
+                conn.close()
         _cache_time = now
         logger.info(f"[Dedup] Cache atualizado: {len(_recent_titles_cache)} títulos")
 
@@ -122,7 +125,7 @@ def fetch_feed(url: str):
 
 
 
-def process_feed(source: dict, positive_kw: list, negative_kw: list) -> dict:
+def process_feed(source: dict, positive_kw: list, negative_kw: list, conn=None) -> dict:
     with Timer(f"fetch {source['name']}") as timer:
         stats = {
             "source_id": source["id"],
@@ -154,7 +157,7 @@ def process_feed(source: dict, positive_kw: list, negative_kw: list) -> dict:
             freshness_cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=MAX_NEWS_AGE_HOURS)
 
             # Carregar títulos recentes para deduplicação
-            recent_titles = get_recent_titles_cached()
+            recent_titles = get_recent_titles_cached(conn=conn)
 
             for entry in feed.entries:
                 title = clean_html(entry.get("title", ""))
@@ -203,7 +206,8 @@ def process_feed(source: dict, positive_kw: list, negative_kw: list) -> dict:
                     author=entry.get("author", ""),
                     published_at=published,
                     priority_score=weighted_score,
-                    matched_keywords=matched
+                    matched_keywords=matched,
+                    conn=conn,
                 )
 
                 if news_id:
@@ -225,7 +229,8 @@ def process_feed(source: dict, positive_kw: list, negative_kw: list) -> dict:
             success=stats["success"],
             news_count=stats["new_count"],
             error_message=stats["error"],
-            duration_ms=timer.elapsed_ms
+            duration_ms=timer.elapsed_ms,
+            conn=conn,
         )
 
         return stats
@@ -237,31 +242,55 @@ def fetch_all_sources(category: str = None) -> list:
     _recent_titles_cache = None
     _cache_time = None
 
-    sources = get_active_sources()
-    if category:
-        sources = [s for s in sources if s["category"] == category]
+    # Uma única conexão persistente para todo o run — evita centenas de
+    # handshakes TCP+TLS contra o Supabase, que era o gargalo principal.
+    conn = get_connection()
 
-    positive_kw, negative_kw = get_keywords()
-    results = []
+    try:
+        sources = get_active_sources(conn=conn)
+        if category:
+            sources = [s for s in sources if s["category"] == category]
 
-    total_duplicates = 0
+        positive_kw, negative_kw = get_keywords(conn=conn)
+        results = []
 
-    for i, source in enumerate(sources, 1):
-        logger.info(f"[{i}/{len(sources)}] {source['name']}...")
-        result = process_feed(source, positive_kw, negative_kw)
+        total_duplicates = 0
 
-        status = "OK" if result["success"] else "ERRO"
-        dup_info = f", {result['duplicate_count']} dup" if result['duplicate_count'] > 0 else ""
-        stale_info = f", {result.get('stale_count', 0)} antigas" if result.get('stale_count', 0) > 0 else ""
-        logger.info(f"  {status} ({result['new_count']} novas{dup_info}{stale_info})")
+        for i, source in enumerate(sources, 1):
+            logger.info(f"[{i}/{len(sources)}] {source['name']}...")
 
-        total_duplicates += result['duplicate_count']
-        results.append(result)
+            try:
+                result = process_feed(source, positive_kw, negative_kw, conn=conn)
+            except Exception as e:
+                # Se a conexão morreu no meio do run, reconectar uma vez e seguir.
+                logger.warning(f"Erro processando {source['name']}: {e}. Reconectando ao DB...")
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = get_connection()
+                # Invalidar cache de dedup para recarregar com a nova conexão
+                _recent_titles_cache = None
+                _cache_time = None
+                result = process_feed(source, positive_kw, negative_kw, conn=conn)
 
-    if total_duplicates > 0:
-        logger.info(f"[Dedup] Total de duplicatas ignoradas: {total_duplicates}")
+            status = "OK" if result["success"] else "ERRO"
+            dup_info = f", {result['duplicate_count']} dup" if result['duplicate_count'] > 0 else ""
+            stale_info = f", {result.get('stale_count', 0)} antigas" if result.get('stale_count', 0) > 0 else ""
+            logger.info(f"  {status} ({result['new_count']} novas{dup_info}{stale_info})")
 
-    return results
+            total_duplicates += result['duplicate_count']
+            results.append(result)
+
+        if total_duplicates > 0:
+            logger.info(f"[Dedup] Total de duplicatas ignoradas: {total_duplicates}")
+
+        return results
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 
 def get_fetch_summary(results: list) -> dict:

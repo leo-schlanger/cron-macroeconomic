@@ -21,16 +21,24 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 LOCAL_DB_PATH = Path(__file__).parent / "news.db"
 
 
+_logged_connection_kind = False
+
+
 def get_connection():
     """Retorna conexão com o banco de dados."""
+    global _logged_connection_kind
     if DATABASE_URL and HAS_POSTGRES:
         conn = psycopg2.connect(DATABASE_URL)
-        print("[DB] Conectado ao Supabase")
+        if not _logged_connection_kind:
+            print("[DB] Conectado ao Supabase")
+            _logged_connection_kind = True
         return conn
     else:
         conn = sqlite3.connect(str(LOCAL_DB_PATH))
         conn.row_factory = sqlite3.Row
-        print(f"[DB] Usando SQLite local: {LOCAL_DB_PATH}")
+        if not _logged_connection_kind:
+            print(f"[DB] Usando SQLite local: {LOCAL_DB_PATH}")
+            _logged_connection_kind = True
         return conn
 
 
@@ -331,9 +339,11 @@ def load_keywords_from_json():
         conn.close()
 
 
-def get_active_sources() -> list:
-    """Retorna todas as fontes ativas."""
-    conn = get_connection()
+def get_active_sources(conn=None) -> list:
+    """Retorna todas as fontes ativas. Aceita conexão externa para reuso."""
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
     try:
         if is_postgres():
             cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -345,12 +355,15 @@ def get_active_sources() -> list:
             sources = [dict(row) for row in cursor.fetchall()]
         return sources
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
 
 
-def get_keywords() -> tuple:
-    """Retorna keywords positivas e negativas."""
-    conn = get_connection()
+def get_keywords(conn=None) -> tuple:
+    """Retorna keywords positivas e negativas. Aceita conexão externa para reuso."""
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
     try:
         cursor = conn.cursor()
 
@@ -368,14 +381,18 @@ def get_keywords() -> tuple:
 
         return positive, negative
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
 
 
 def insert_news(source_id: int, title: str, link: str, description: str = None,
                 content: str = None, author: str = None, published_at: datetime = None,
-                priority_score: float = 0, matched_keywords: list = None) -> Optional[int]:
-    """Insere uma notícia no banco de dados."""
-    conn = get_connection()
+                priority_score: float = 0, matched_keywords: list = None,
+                conn=None) -> Optional[int]:
+    """Insere uma notícia no banco de dados. Aceita conexão externa para reuso."""
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
     try:
         cursor = conn.cursor()
         kw_json = json.dumps(matched_keywords) if matched_keywords else None
@@ -402,16 +419,23 @@ def insert_news(source_id: int, title: str, link: str, description: str = None,
         conn.commit()
         return news_id
     except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         print(f"Erro ao inserir notícia: {e}")
         return None
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
 
 
 def update_source_fetch(source_id: int, success: bool, news_count: int = 0,
-                        error_message: str = None, duration_ms: int = 0):
-    """Atualiza estatísticas de fetch de uma fonte."""
-    conn = get_connection()
+                        error_message: str = None, duration_ms: int = 0, conn=None):
+    """Atualiza estatísticas de fetch de uma fonte. Aceita conexão externa para reuso."""
+    own_conn = conn is None
+    if own_conn:
+        conn = get_connection()
     try:
         cursor = conn.cursor()
 
@@ -450,7 +474,8 @@ def update_source_fetch(source_id: int, success: bool, news_count: int = 0,
 
         conn.commit()
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
 
 
 def get_news_stats() -> dict:
