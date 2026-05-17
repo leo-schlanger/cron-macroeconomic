@@ -288,7 +288,7 @@ RESPONDA APENAS EM JSON (sem markdown, sem ```):
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.7,
-                "maxOutputTokens": 2000,
+                "maxOutputTokens": 4096,
                 "responseMimeType": "application/json"
             }
         },
