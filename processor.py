@@ -7,6 +7,7 @@ Processador de notícias para blog.
 import os
 import re
 import json
+import time
 import requests
 from typing import Optional
 from datetime import datetime
@@ -23,9 +24,10 @@ from html_parser import extract_image_from_content as extract_image_html
 # APIs disponíveis
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Configuração
-AI_PROVIDER = os.getenv("AI_PROVIDER", "openai")  # openai ou anthropic
+AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")  # gemini, anthropic ou openai
 MAX_API_RETRIES = 3
 
 
@@ -231,14 +233,127 @@ RESPONDA APENAS EM JSON (sem markdown):
         raise Exception(f"Não foi possível extrair JSON da resposta: {text[:200]}")
 
 
-def rewrite_news(title: str, content: str, source_name: str) -> dict:
-    """Reescreve notícia usando o provedor de IA configurado."""
-    if AI_PROVIDER == "anthropic" and ANTHROPIC_API_KEY:
-        return rewrite_with_anthropic(title, content, source_name)
-    elif OPENAI_API_KEY:
-        return rewrite_with_openai(title, content, source_name)
+def rewrite_with_gemini(title: str, content: str, source_name: str) -> dict:
+    """Reescreve notícia usando Google Gemini Flash (grátis). Sem retry — fail fast para fallback."""
+    if not GEMINI_API_KEY:
+        raise Exception("GEMINI_API_KEY não configurada")
+
+    prompt = f"""Você é um jornalista econômico especializado em macroeconomia e mercados financeiros.
+Com base nos FATOS da notícia abaixo, escreva um artigo ORIGINAL de blog com sua própria análise e estrutura.
+
+FATOS DA NOTÍCIA (apenas como referência factual):
+Título: {title}
+Fonte: {source_name}
+Conteúdo: {content[:2000]}
+
+INSTRUÇÕES DE ORIGINALIDADE (CRÍTICO):
+1. NÃO copie frases, estrutura ou parágrafos da notícia original
+2. Crie uma estrutura e narrativa completamente novas
+3. Use vocabulário e construções frasais diferentes do original
+4. Adicione contexto macroeconômico relevante (ex: como isso se conecta a tendências globais)
+5. Crie um título original que NÃO seja tradução ou paráfrase direta do original
+6. O artigo deve funcionar de forma independente - um leitor não precisa ler a fonte original
+7. Inclua ao final do conteúdo uma linha de atribuição: "Fonte original: {source_name}"
+
+INSTRUÇÕES DE FORMATO:
+1. Estruture com 3-5 parágrafos bem desenvolvidos
+2. Use tom profissional, objetivo e factual
+3. Gere um resumo de 2-3 frases
+4. Crie 3-5 tags relevantes
+
+DIRETRIZES DE IMPARCIALIDADE:
+- Seja ESTRITAMENTE IMPARCIAL politicamente - não tome partido em conflitos
+- Foque APENAS nos impactos econômicos e de mercado
+- NÃO use linguagem emotiva ou sensacionalista
+- NÃO faça julgamentos morais sobre países, governos ou grupos
+- Apresente fatos de forma equilibrada, citando múltiplas perspectivas quando relevante
+- Evite termos carregados como "terrorista", "regime", "colonizador" - use termos neutros
+- Se a notícia envolver conflitos, foque APENAS nas consequências econômicas (preço do petróleo, mercados, sanções, comércio)
+
+RESPONDA APENAS EM JSON (sem markdown, sem ```):
+{{
+    "title_pt": "título original em português",
+    "content_pt": "conteúdo original em português (3-5 parágrafos, com atribuição ao final)",
+    "summary_pt": "resumo em português",
+    "title_en": "original title in English",
+    "content_en": "original content in English (3-5 paragraphs, with attribution at the end)",
+    "summary_en": "summary in English",
+    "tags": ["tag1", "tag2", "tag3"]
+}}"""
+
+    response = requests.post(
+        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}",
+        headers={"Content-Type": "application/json"},
+        json={
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 2000,
+                "responseMimeType": "application/json"
+            }
+        },
+        timeout=60
+    )
+
+    if response.status_code == 429:
+        raise Exception("Gemini rate limit (429)")
+    if response.status_code != 200:
+        raise Exception(f"Gemini API error: {response.status_code}")
+
+    result = response.json()
+    candidates = result.get("candidates", [])
+    if not candidates:
+        raise Exception(f"Gemini sem candidates")
+    text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+    if not text:
+        raise Exception("Gemini texto vazio")
+
+    # Extrair JSON da resposta
+    json_match = re.search(r'\{[\s\S]*\}', text)
+    if json_match:
+        json_str = json_match.group()
+        json_str = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', ' ', json_str)
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            def fix_string_newlines(m):
+                s = m.group(0)
+                s = s.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+                return s
+            json_str = re.sub(r'"[^"]*"', fix_string_newlines, json_str)
+            return json.loads(json_str)
     else:
-        raise Exception("Nenhuma API de IA configurada. Configure OPENAI_API_KEY ou ANTHROPIC_API_KEY")
+        raise Exception(f"Gemini JSON inválido: {text[:200]}")
+
+
+# Contadores por run para logging
+_provider_stats = {"gemini": 0, "claude": 0}
+
+
+def rewrite_news(title: str, content: str, source_name: str) -> dict:
+    """Reescreve notícia: tenta Gemini (grátis) primeiro, fallback para Claude se falhar."""
+    # Tentar Gemini primeiro (grátis)
+    if GEMINI_API_KEY:
+        try:
+            result = rewrite_with_gemini(title, content, source_name)
+            _provider_stats["gemini"] += 1
+            logger.info("  [Gemini] OK")
+            return result
+        except Exception as e:
+            logger.warning(f"  [Gemini] Falhou ({str(e)[:60]}), fallback Claude...")
+
+    # Fallback para Claude
+    if ANTHROPIC_API_KEY:
+        result = rewrite_with_anthropic(title, content, source_name)
+        _provider_stats["claude"] += 1
+        logger.info("  [Claude] OK (fallback)")
+        return result
+
+    # Fallback final para OpenAI
+    if OPENAI_API_KEY:
+        return rewrite_with_openai(title, content, source_name)
+
+    raise Exception("Nenhuma API de IA configurada. Configure GEMINI_API_KEY ou ANTHROPIC_API_KEY")
 
 
 def process_single_news(news: dict) -> bool:
@@ -346,12 +461,16 @@ def process_queue(limit: int = 10):
     logger.info("=" * 50)
 
     # Verificar API
-    if not OPENAI_API_KEY and not ANTHROPIC_API_KEY:
-        logger.error("ERRO: Configure OPENAI_API_KEY ou ANTHROPIC_API_KEY")
+    if not GEMINI_API_KEY and not OPENAI_API_KEY and not ANTHROPIC_API_KEY:
+        logger.error("ERRO: Configure GEMINI_API_KEY, ANTHROPIC_API_KEY ou OPENAI_API_KEY")
         return
 
-    provider = "Anthropic" if AI_PROVIDER == "anthropic" else "OpenAI"
-    logger.info(f"Usando: {provider}")
+    providers = []
+    if GEMINI_API_KEY:
+        providers.append("Gemini (primário)")
+    if ANTHROPIC_API_KEY:
+        providers.append("Claude (fallback)")
+    logger.info(f"Providers: {', '.join(providers)}")
 
     # Pegar notícias pendentes
     pending = get_pending_news(limit * 2)  # Pegar mais para compensar duplicatas
@@ -362,17 +481,26 @@ def process_queue(limit: int = 10):
     pending = pending[:limit]  # Limitar após deduplicação
     logger.info(f"Após deduplicação: {len(pending)}")
 
+    # Reset contadores
+    _provider_stats["gemini"] = 0
+    _provider_stats["claude"] = 0
+
     success = 0
     errors = 0
 
-    for news in pending:
+    for i, news in enumerate(pending):
         if process_single_news(news):
             success += 1
         else:
             errors += 1
 
+        # Delay entre artigos para respeitar rate limit do Gemini (5 RPM)
+        if i < len(pending) - 1:
+            time.sleep(15)
+
     logger.info("=" * 50)
     logger.info(f"Concluído: {success} sucesso, {errors} erros")
+    logger.info(f"Providers usados: Gemini={_provider_stats['gemini']}, Claude={_provider_stats['claude']}")
     logger.info("=" * 50)
 
 

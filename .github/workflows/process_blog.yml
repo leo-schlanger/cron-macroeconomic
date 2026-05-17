@@ -2,7 +2,7 @@ name: Process Blog Posts
 
 on:
   schedule:
-    - cron: '30 */2 * * *'  # A cada 2 horas, minuto 30
+    - cron: '15 */2 * * *'  # A cada 2 horas, minuto 15 (offset do politics)
   workflow_dispatch:
     inputs:
       limit:
@@ -46,8 +46,9 @@ jobs:
 
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      AI_PROVIDER: anthropic
+      AI_PROVIDER: gemini
 
     steps:
       - uses: actions/checkout@v4
