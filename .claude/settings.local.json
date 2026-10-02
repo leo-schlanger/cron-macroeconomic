@@ -12,7 +12,25 @@
       "Bash(git commit:*)",
       "Bash(git config:*)",
       "Bash(gh repo create:*)",
-      "Bash(python -c:*)"
+      "Bash(python -c:*)",
+      "Bash(dir:*)",
+      "WebFetch(domain:www.rba.gov.au)",
+      "WebFetch(domain:www.snb.ch)",
+      "WebFetch(domain:www.france24.com)",
+      "WebFetch(domain:en.yna.co.kr)",
+      "WebFetch(domain:www.iol.co.za)",
+      "WebFetch(domain:www.bnamericas.com)",
+      "WebFetch(domain:www.khaleejtimes.com)",
+      "WebFetch(domain:www.reutersagency.com)",
+      "WebSearch",
+      "WebFetch(domain:www.forexlive.com)",
+      "Bash(xargs grep:*)",
+      "Bash(python3:*)",
+      "Bash(wc -l /d/Projetos/cron_macroeconomic/*.py)",
+      "Bash(grep:*)",
+      "Read(//tmp/**)",
+      "Bash(bash /tmp/kw_analysis.sh)",
+      "Bash(gh run:*)"
     ]
   }
 }
