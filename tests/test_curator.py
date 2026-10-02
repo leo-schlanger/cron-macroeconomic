@@ -105,8 +105,38 @@ def test_claude_truncated_answer_is_an_error(monkeypatch):
         curator.claude_tool("s", "u", curator.ARTICLE_TOOL, 100)
 
 
+def test_free_chain_routes_triage_to_lite_and_articles_to_flash(monkeypatch):
+    for k in ("ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "GROQ_API_KEY"):
+        monkeypatch.setattr(curator, k, None)
+    monkeypatch.setattr(curator, "GEMINI_API_KEY", "g")
+    assert [n for n, _ in curator.provider_chain("triage")] == ["gemini-2.5-flash-lite", "gemini-2.5-flash"]
+    assert [n for n, _ in curator.provider_chain("article")] == ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    monkeypatch.setattr(curator, "GROQ_API_KEY", "q")
+    monkeypatch.setattr(curator, "OPENROUTER_API_KEY", "o")
+    names = [n for n, _ in curator.provider_chain("article")]
+    assert names[0].startswith("openrouter:") and names[-1].startswith("groq:")
+
+
+def test_openai_compatible_tool_call(monkeypatch):
+    seen = {}
+
+    def post(url, **k):
+        seen.update(url=url, body=k["json"], auth=k["headers"]["Authorization"])
+        return Resp(200, {"choices": [{"finish_reason": "tool_calls", "message": {"tool_calls": [
+            {"function": {"name": "rank_news", "arguments": '{"items": []}'}}]}}]})
+    monkeypatch.setattr(curator.requests, "post", post)
+    out = curator.openai_compat_tool("https://api.groq.com/openai/v1", "q", "llama", "s", "u", curator.TRIAGE_TOOL, 100)
+    assert out == {"items": []} and seen["url"].endswith("/chat/completions") and seen["auth"] == "Bearer q"
+    assert seen["body"]["tool_choice"]["function"]["name"] == "rank_news"
+    monkeypatch.setattr(curator.requests, "post", lambda *a, **k: Resp(200, {"choices": [{"finish_reason": "length", "message": {}}]}))
+    with pytest.raises(curator.LLMError, match="cortada"):
+        curator.openai_compat_tool("u", "q", "m", "s", "u", curator.TRIAGE_TOOL, 10)
+
+
 def test_falls_back_to_gemini_with_key_in_header(monkeypatch):
     monkeypatch.setattr(curator, "ANTHROPIC_API_KEY", None)
+    monkeypatch.setattr(curator, "OPENROUTER_API_KEY", None)
+    monkeypatch.setattr(curator, "GROQ_API_KEY", None)
     monkeypatch.setattr(curator, "GEMINI_API_KEY", "g")
     seen = {}
 
@@ -115,14 +145,14 @@ def test_falls_back_to_gemini_with_key_in_header(monkeypatch):
         return Resp(200, {"candidates": [{"content": {"parts": [{"text": '{"items": []}'}]}}]})
     monkeypatch.setattr(curator.requests, "post", post)
     out, provider = curator.structured("s", "u", curator.TRIAGE_TOOL, 100)
-    assert out == {"items": []} and provider == "gemini"
+    assert out == {"items": []} and provider == "gemini-2.5-flash"
     assert "key=" not in seen["url"] and seen["headers"]["x-goog-api-key"] == "g"
     assert "description" not in str(seen["schema"].get("properties", {}).get("items", {}).get("description", ""))
 
 
-def test_both_providers_down_raises(monkeypatch):
-    monkeypatch.setattr(curator, "ANTHROPIC_API_KEY", None)
-    monkeypatch.setattr(curator, "GEMINI_API_KEY", None)
+def test_no_provider_raises(monkeypatch):
+    for k in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY", "GROQ_API_KEY"):
+        monkeypatch.setattr(curator, k, None)
     with pytest.raises(curator.LLMError):
         curator.structured("s", "u", curator.TRIAGE_TOOL, 100)
 
@@ -139,7 +169,7 @@ def test_run_respects_daily_cap_and_marks_everything(monkeypatch):
     monkeypatch.setattr(curator, "recent_titles", lambda: [])
     monkeypatch.setattr(curator, "mark", lambda ids, status, msg=None: marks.append((sorted(ids), status)))
 
-    def structured(system, user, tool, max_tokens):
+    def structured(system, user, tool, max_tokens, task="article"):
         if tool["name"] == "rank_news":
             return {"items": [item(1, 9, "nfp"), item(2, 8, "fed")]}, "claude"
         return GOOD, "claude"

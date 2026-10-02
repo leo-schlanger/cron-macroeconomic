@@ -8,7 +8,8 @@ Fluxo de cada rodada (cron a cada 2h):
    últimas 24h.
 3. Publica no máximo PER_RUN por rodada e DAILY_MAX por dia, só com impacto
    >= MIN_IMPACT. Rodada calma não publica nada.
-4. Artigo (Claude; Gemini grátis como reserva) em PT e EN, estruturado para
+4. Artigo em PT e EN (provedores em provider_chain: Claude/OpenRouter se houver
+   chave, Gemini grátis, Groq grátis), estruturado para
    decisão: o que aconteceu, por que importa, impacto por classe de ativo, o que
    acompanhar, cenários. Saída via tool use: o JSON sempre vem completo.
 5. Checagem de qualidade: se falhar, o post vira rascunho em vez de publicar.
@@ -29,7 +30,16 @@ from utils import logger
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
+# Free tier: each Gemini model has its own daily quota. Triage goes to Flash-Lite
+# (bigger free quota), articles to Flash (better writing), each backing the other.
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_LITE_MODEL = os.getenv("GEMINI_LITE_MODEL", "gemini-2.5-flash-lite")
+# Optional OpenAI-compatible providers (only used when their key is set):
+# Groq has a free plan (no card); OpenRouter is paid but accepts crypto (USDC).
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-haiku-4.5")
 
 MIN_IMPACT = int(os.getenv("CURATOR_MIN_IMPACT", "7"))
 PER_RUN = int(os.getenv("CURATOR_PER_RUN", "2"))
@@ -99,12 +109,12 @@ def _gemini_schema(schema: dict) -> dict:
     return out
 
 
-def gemini_json(system: str, user: str, schema: dict, max_tokens: int) -> dict:
+def gemini_json(system: str, user: str, schema: dict, max_tokens: int, model: str = GEMINI_MODEL) -> dict:
     if not GEMINI_API_KEY:
         raise LLMError("GEMINI_API_KEY não configurada")
     try:
         r = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
             headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY},
             json={
                 "systemInstruction": {"parts": [{"text": system}]},
@@ -121,7 +131,7 @@ def gemini_json(system: str, user: str, schema: dict, max_tokens: int) -> dict:
     except requests.RequestException as e:
         raise LLMError(f"Gemini: {type(e).__name__}")
     if r.status_code != 200:
-        raise LLMError(f"Gemini HTTP {r.status_code}")
+        raise LLMError(f"Gemini {model} HTTP {r.status_code}")
     try:
         cand = r.json()["candidates"][0]
         text = cand["content"]["parts"][0]["text"]
@@ -131,20 +141,62 @@ def gemini_json(system: str, user: str, schema: dict, max_tokens: int) -> dict:
         raise LLMError(f"Gemini resposta inválida: {type(e).__name__} (finishReason={reason})")
 
 
-def structured(system: str, user: str, tool: dict, max_tokens: int) -> tuple[dict, str]:
-    """Claude first, Gemini (free) as backup. Returns (answer, provider)."""
+def openai_compat_tool(base_url: str, key: str | None, model: str, system: str, user: str,
+                       tool: dict, max_tokens: int) -> dict:
+    """OpenAI-style chat completion forcing one function call (Groq, OpenRouter)."""
+    if not key:
+        raise LLMError("chave não configurada")
+    try:
+        r = requests.post(f"{base_url}/chat/completions", timeout=120,
+                          headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                          json={"model": model, "max_tokens": max_tokens, "temperature": 0.4,
+                                "messages": [{"role": "system", "content": system},
+                                             {"role": "user", "content": user}],
+                                "tools": [{"type": "function", "function": {
+                                    "name": tool["name"], "description": tool["description"],
+                                    "parameters": tool["input_schema"]}}],
+                                "tool_choice": {"type": "function", "function": {"name": tool["name"]}}})
+    except requests.RequestException as e:
+        raise LLMError(f"{model}: {type(e).__name__}")
+    if r.status_code != 200:
+        raise LLMError(f"{model} HTTP {r.status_code}: {r.text[:120]}")
+    try:
+        choice = r.json()["choices"][0]
+        if choice.get("finish_reason") == "length":
+            raise LLMError(f"{model}: resposta cortada")
+        return json.loads(choice["message"]["tool_calls"][0]["function"]["arguments"])
+    except (KeyError, IndexError, TypeError, ValueError) as e:
+        raise LLMError(f"{model}: resposta inválida ({type(e).__name__})")
+
+
+def provider_chain(task: str) -> list[tuple[str, callable]]:
+    """Ordered providers for ``task`` ('triage' or 'article'); keyless ones are skipped."""
+    gem_order = [GEMINI_LITE_MODEL, GEMINI_MODEL] if task == "triage" else [GEMINI_MODEL, GEMINI_LITE_MODEL]
+    chain = []
+    if ANTHROPIC_API_KEY:
+        chain.append(("claude", lambda sy, u, t, m: claude_tool(sy, u, t, m)))
+    if OPENROUTER_API_KEY:
+        chain.append((f"openrouter:{OPENROUTER_MODEL}", lambda sy, u, t, m: openai_compat_tool(
+            "https://openrouter.ai/api/v1", OPENROUTER_API_KEY, OPENROUTER_MODEL, sy, u, t, m)))
+    if GEMINI_API_KEY:
+        for gm in gem_order:
+            chain.append((gm, lambda sy, u, t, m, gm=gm: gemini_json(sy, u, t["input_schema"], m, model=gm)))
+    if GROQ_API_KEY:
+        chain.append((f"groq:{GROQ_MODEL}", lambda sy, u, t, m: openai_compat_tool(
+            "https://api.groq.com/openai/v1", GROQ_API_KEY, GROQ_MODEL, sy, u, t, m)))
+    return chain
+
+
+def structured(system: str, user: str, tool: dict, max_tokens: int, task: str = "article") -> tuple[dict, str]:
+    """First provider that answers wins. Returns (answer, provider)."""
     errors = []
-    try:
-        return claude_tool(system, user, tool, max_tokens), "claude"
-    except LLMError as e:
-        errors.append(str(e))
-        logger.warning(f"  [claude] {str(e)[:120]}")
-    try:
-        return gemini_json(system, user, tool["input_schema"], max_tokens), "gemini"
-    except LLMError as e:
-        errors.append(str(e))
-        logger.warning(f"  [gemini] {str(e)[:120]}")
-    raise LLMError(" | ".join(errors))
+    for name, call in provider_chain(task):
+        try:
+            return call(system, user, tool, max_tokens), name
+        except LLMError as e:
+            errors.append(f"{name}: {e}")
+            logger.warning(f"  [{name}] {str(e)[:120]}")
+    raise LLMError(" | ".join(errors) or "nenhum provedor configurado")
 
 
 # ─── triage ──────────────────────────────────────────────────
@@ -252,6 +304,9 @@ ESTRUTURA do content_pt em Markdown (títulos com ##, 450-700 palavras):
 content_en: o mesmo artigo em inglês natural (mesma estrutura, títulos em inglês: What happened,
 Why it matters, Market impact, What to watch, Scenarios), última linha
 "*Original source: {fonte}. For information only, not investment advice.*"
+
+VOCABULÁRIO do mercado brasileiro: "payroll" (não "folhas de pagamento não-agrícolas"), "Treasuries",
+"yield"/"rendimento dos títulos", "Fed", "BCE", "Copom", "Selic", "dólar", "real", "Ibovespa", "pontos-base".
 
 ESTILO: título original e específico (não traduza o título da fonte), sem sensacionalismo,
 politicamente imparcial (foco só em consequências econômicas; termos neutros), não copie frases da fonte.
@@ -390,7 +445,7 @@ def run(dry_run: bool = False) -> dict:
 
     try:
         ranked, provider = structured(TRIAGE_SYSTEM, build_triage_prompt(candidates, recent_titles()),
-                                      TRIAGE_TOOL, 2000)
+                                      TRIAGE_TOOL, 2000, task="triage")
     except LLMError as e:
         logger.error(f"[curator] triagem falhou: {e}")
         stats["errors"] += 1
@@ -455,7 +510,8 @@ def preview() -> None:
     if not candidates:
         print("nenhuma candidata")
         return
-    ranked, provider = structured(TRIAGE_SYSTEM, build_triage_prompt(candidates, recent_titles()), TRIAGE_TOOL, 2000)
+    ranked, provider = structured(TRIAGE_SYSTEM, build_triage_prompt(candidates, recent_titles()), TRIAGE_TOOL, 2000,
+                                  task="triage")
     pre = {c["id"]: c.get("priority_score") or 0 for c in candidates}
     chosen = select_for_publication(ranked.get("items") or [], {c["id"] for c in candidates}, 1, prefilter=pre)
     if not chosen:
