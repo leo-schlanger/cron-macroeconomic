@@ -169,17 +169,33 @@ def test_run_respects_daily_cap_and_marks_everything(monkeypatch):
     monkeypatch.setattr(curator, "recent_titles", lambda: [])
     monkeypatch.setattr(curator, "mark", lambda ids, status, msg=None: marks.append((sorted(ids), status)))
 
-    def structured(system, user, tool, max_tokens, task="article"):
-        if tool["name"] == "rank_news":
-            return {"items": [item(1, 9, "nfp"), item(2, 8, "fed")]}, "claude"
-        return GOOD, "claude"
-    monkeypatch.setattr(curator, "structured", structured)
+    monkeypatch.setattr(curator, "structured",
+                        lambda *a, **k: ({"items": [item(1, 9, "nfp"), item(2, 8, "fed")]}, "gemini-2.5-flash-lite"))
+    monkeypatch.setattr(curator, "provider_chain", lambda task: [("gemini-2.5-flash", lambda *a: GOOD)])
     monkeypatch.setattr("database_blog.save_blog_post", lambda **k: saved.append(k) or 101)
     monkeypatch.setattr("processor.extract_image_from_content", lambda c, l: None)
     stats = curator.run()
     assert stats["published"] == 1 and saved[0]["news_id"] == 1 and saved[0]["status"] == "published"
     assert saved[0]["priority_score"] == 9.0
     assert ([2, 3], "skipped") in marks and ([1], "completed") in marks
+
+
+def test_quality_failure_tries_next_provider_then_keeps_best_draft(monkeypatch):
+    english_title = dict(GOOD, title_pt="Eurozone inflation hits three-year high",
+                         title_en="Eurozone inflation hits three-year high")
+    calls = []
+
+    def chain(task):
+        return [("gemini-2.5-flash", lambda *a: calls.append("flash") or english_title),
+                ("groq:gpt-oss", lambda *a: calls.append("groq") or GOOD)]
+    monkeypatch.setattr(curator, "provider_chain", chain)
+    art, provider, problems = curator.write_article({"source_name": "FT", "title": "t"}, item(1, 8, "x"))
+    assert calls == ["flash", "groq"] and provider == "groq:gpt-oss" and problems == []
+
+    short = dict(GOOD, content_pt="## a\ncurto")
+    monkeypatch.setattr(curator, "provider_chain", lambda task: [("a", lambda *a: short), ("b", lambda *a: english_title)])
+    art, provider, problems = curator.write_article({"source_name": "FT", "title": "t"}, item(1, 8, "x"))
+    assert provider == "b" and len(problems) == 1          # fewest problems kept for the draft
 
 
 def test_run_with_full_day_does_not_call_llm(monkeypatch):

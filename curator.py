@@ -37,7 +37,7 @@ GEMINI_LITE_MODEL = os.getenv("GEMINI_LITE_MODEL", "gemini-2.5-flash-lite")
 # Optional OpenAI-compatible providers (only used when their key is set):
 # Groq has a free plan (no card); OpenRouter is paid but accepts crypto (USDC).
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "anthropic/claude-haiku-4.5")
 
@@ -366,7 +366,38 @@ def quality_problems(a: dict) -> list[str]:
         problems.append("content_pt com palavras em outro idioma")
     if a.get("title_pt") and _FOREIGN_IN_PT.search(a["title_pt"]):
         problems.append("título PT com palavra em outro idioma")
+    tp = set(re.findall(r"\w+", (a.get("title_pt") or "").lower()))
+    te = set(re.findall(r"\w+", (a.get("title_en") or "").lower()))
+    if tp and te and len(tp & te) / len(tp) > 0.7:
+        problems.append("título PT igual ao título EN (não traduzido)")
     return problems
+
+
+def write_article(news: dict, triage: dict) -> tuple[dict, str, list[str]]:
+    """Try each provider until one passes the quality gate.
+
+    Returns (article, provider, problems). If none passes, the version with
+    the fewest problems is returned (saved as draft by the caller).
+    """
+    prompt = build_article_prompt(news, triage)
+    best = None
+    errors = []
+    for name, call in provider_chain("article"):
+        try:
+            art = call(ARTICLE_SYSTEM, prompt, ARTICLE_TOOL, 6000)
+        except LLMError as e:
+            errors.append(f"{name}: {e}")
+            logger.warning(f"  [{name}] {str(e)[:120]}")
+            continue
+        problems = quality_problems(art)
+        if not problems:
+            return art, name, []
+        logger.warning(f"  [{name}] reprovado na qualidade: {'; '.join(problems)}")
+        if best is None or len(problems) < len(best[2]):
+            best = (art, name, problems)
+    if best:
+        return best
+    raise LLMError(" | ".join(errors) or "nenhum provedor configurado")
 
 
 # ─── DB ──────────────────────────────────────────────────────
@@ -475,13 +506,12 @@ def run(dry_run: bool = False) -> dict:
         news = by_id[item["id"]]
         logger.info(f"[curator] escrevendo ({item['impact']}/10): {news['title'][:80]}")
         try:
-            art, provider = structured(ARTICLE_SYSTEM, build_article_prompt(news, item), ARTICLE_TOOL, 6000)
+            art, provider, problems = write_article(news, item)
         except LLMError as e:
             logger.error(f"  artigo falhou: {str(e)[:150]}")
             mark([news["id"]], "error", str(e)[:500])
             stats["errors"] += 1
             continue
-        problems = quality_problems(art)
         status = "draft" if problems else "published"
         post_id = save_blog_post(
             news_id=news["id"], title_pt=art["title_pt"], content_pt=art["content_pt"],
@@ -518,9 +548,9 @@ def preview() -> None:
         print(f"triagem ({provider}): nada com impacto >= {MIN_IMPACT}")
         return
     news = next(c for c in candidates if c["id"] == chosen[0]["id"])
-    art, provider = structured(ARTICLE_SYSTEM, build_article_prompt(news, chosen[0]), ARTICLE_TOOL, 6000)
+    art, provider, problems = write_article(news, chosen[0])
     print(f"FONTE: {news['title']} ({news['source_name']}) | impacto {chosen[0]['impact']} | via {provider}")
-    print(f"QUALIDADE: {quality_problems(art) or 'OK, seria publicado'}")
+    print(f"QUALIDADE: {problems or 'OK, seria publicado'}")
     print(f"PT ({len(art.get('content_pt', ''))} chars) / EN ({len(art.get('content_en', ''))} chars)")
     print("\n# " + art.get("title_pt", "") + "\n\n" + art.get("summary_pt", "") + "\n\n" + art.get("content_pt", ""))
     print("\n--- EN title:", art.get("title_en"), "| tags:", art.get("tags"))
