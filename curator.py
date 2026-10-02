@@ -342,8 +342,28 @@ def build_article_prompt(news: dict, triage: dict) -> str:
     )
 
 
-_PT_MARKERS = re.compile(r"\b(que|não|para|com|uma|são|também|está|mercado|juros|dólar)\b", re.I)
-_FOREIGN_IN_PT = re.compile(r"\b(the|and|of|los|las|del|inversores|partnership|however)\b", re.I)
+# Function words: frequent, topic-independent, and (almost) exclusive to each
+# language. "a" is left out (article in both PT and EN).
+_PT_FUNC = {"de", "da", "do", "das", "dos", "que", "e", "o", "os", "as", "em", "no", "na", "nos", "nas",
+            "para", "com", "um", "uma", "por", "pelo", "pela", "é", "não", "se", "ao", "aos", "mais", "como"}
+_EN_FUNC = {"the", "and", "of", "to", "in", "is", "for", "on", "that", "with", "by", "are", "was", "this",
+            "from", "its", "has", "have", "will", "which"}
+_ES_FUNC = {"los", "las", "del", "y", "inversores", "según", "también", "pero"}
+# English content words seen leaking into translated titles (audit of real posts).
+_EN_TITLE_LEAKS = {"partnership", "outlook", "insights", "growth", "update", "imposition", "penalty",
+                   "issues", "amid", "faces", "hits", "says", "sees"}
+
+
+_WORD = re.compile(r"[a-záàâãéêíóôõúç]+(?:-[a-záàâãéêíóôõúç]+)*")  # "forçá-los" is one word
+
+
+def language_stats(text: str) -> dict:
+    words = _WORD.findall((text or "").lower())
+    n = max(len(words), 1)
+    return {"words": len(words),
+            "pt": sum(w in _PT_FUNC for w in words) / n,
+            "en": sum(w in _EN_FUNC for w in words) / n,
+            "es": sum(w in _ES_FUNC for w in words) / n}
 
 
 def quality_problems(a: dict) -> list[str]:
@@ -359,16 +379,21 @@ def quality_problems(a: dict) -> list[str]:
         problems.append(f"content_en curto ({len(en)})")
     if len(re.findall(r"^## ", pt, re.M)) < MIN_SECTIONS:
         problems.append("content_pt sem a estrutura de seções")
-    words = max(len(pt.split()), 1)
-    if len(_PT_MARKERS.findall(pt)) / words < 0.04:
+    st = language_stats(pt)
+    if st["words"] >= 50 and (st["pt"] < 0.12 or st["en"] > 0.06):
         problems.append("content_pt não parece português")
-    if len(_FOREIGN_IN_PT.findall(pt)) / words > 0.01:
+    # Proper names ("Reserve Bank of India", "GENIUS Act") put some English function
+    # words in good Portuguese text: only a clear share counts as mixed.
+    elif st["words"] >= 50 and (st["en"] > 0.04 or st["es"] > 0.015):
         problems.append("content_pt com palavras em outro idioma")
-    if a.get("title_pt") and _FOREIGN_IN_PT.search(a["title_pt"]):
+    title_words = _WORD.findall((a.get("title_pt") or "").lower())
+    if (sum(w in _EN_FUNC for w in title_words) >= 2 or any(w in _EN_TITLE_LEAKS for w in title_words)
+            # "del" is left out: place names (Punta del Este, Tierra del Fuego)
+            or any(w in _ES_FUNC - {"y", "del"} for w in title_words)):
         problems.append("título PT com palavra em outro idioma")
     tp = set(re.findall(r"\w+", (a.get("title_pt") or "").lower()))
     te = set(re.findall(r"\w+", (a.get("title_en") or "").lower()))
-    if tp and te and len(tp & te) / len(tp) > 0.7:
+    if tp and te and len(tp & te) / len(tp) > 0.85:
         problems.append("título PT igual ao título EN (não traduzido)")
     return problems
 

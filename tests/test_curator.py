@@ -52,11 +52,16 @@ def test_short_unstructured_or_mixed_language_becomes_draft():
     assert any("curto" in p for p in curator.quality_problems(dict(GOOD, content_pt="## a\ncurto")))
     flat = PT.replace("## ", "")
     assert "content_pt sem a estrutura de seções" in curator.quality_problems(dict(GOOD, content_pt=flat))
-    mixed = PT + " the market and the investors of the world los inversores del mercado" * 20
+    mixed = PT + " the market and the investors of the world los inversores del mercado" * 3
     assert "content_pt com palavras em outro idioma" in curator.quality_problems(dict(GOOD, content_pt=mixed))
     # the exact defects seen in production titles
     assert curator.quality_problems(dict(GOOD, title_pt="Influxo de Inversores Institucionais"))
     assert curator.quality_problems(dict(GOOD, title_pt="Partnership para Crescimento Privado"))
+    # false positives found in the audit of real posts
+    for ok in ("Juros podem subir após autoridades europeias afirmarem que a guerra pode forçá-los a agir",
+               "Investigação sobre plano em Punta del Este preocupa mercados argentinos",
+               "Bank of Japan eleva juros pela primeira vez em décadas"):
+        assert not any("título" in p for p in curator.quality_problems(dict(GOOD, title_pt=ok))), ok
     assert "campo vazio: summary_en" in curator.quality_problems(dict(GOOD, summary_en=""))
 
 
@@ -193,7 +198,9 @@ def test_quality_failure_tries_next_provider_then_keeps_best_draft(monkeypatch):
     assert calls == ["flash", "groq"] and provider == "groq:gpt-oss" and problems == []
 
     short = dict(GOOD, content_pt="## a\ncurto")
-    monkeypatch.setattr(curator, "provider_chain", lambda task: [("a", lambda *a: short), ("b", lambda *a: english_title)])
+    one_problem = dict(GOOD, title_pt="Eurozone inflation three-year high", title_en="Eurozone inflation three-year high")
+    assert len(curator.quality_problems(one_problem)) == 1
+    monkeypatch.setattr(curator, "provider_chain", lambda task: [("a", lambda *a: short), ("b", lambda *a: one_problem)])
     art, provider, problems = curator.write_article({"source_name": "FT", "title": "t"}, item(1, 8, "x"))
     assert provider == "b" and len(problems) == 1          # fewest problems kept for the draft
 
