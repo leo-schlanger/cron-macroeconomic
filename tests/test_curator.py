@@ -18,6 +18,13 @@ def test_selects_highest_impact_one_per_story_within_slots():
     assert [g["id"] for g in got] == [5, 3]          # best of each story, highest first
 
 
+def test_ties_go_to_the_stronger_prefilter_score():
+    ranked = [item(1, 7, "hedge-funds"), item(2, 7, "oil-supply"), item(3, 7, "france-bonds")]
+    got = curator.select_for_publication(ranked, {1, 2, 3}, slots=2, min_impact=7,
+                                         prefilter={1: 6.0, 2: 14.6, 3: 15.0})
+    assert [g["id"] for g in got] == [3, 2]
+
+
 def test_quiet_run_publishes_nothing_and_ignores_unknown_ids():
     assert curator.select_for_publication([item(1, 6, "a")], {1}, slots=2, min_impact=7) == []
     assert curator.select_for_publication([item(99, 10, "a")], {1}, slots=2, min_impact=7) == []

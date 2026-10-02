@@ -80,23 +80,14 @@ def add_to_cache(news_id: int, title: str, description: str):
         })
 
 
-def calculate_priority(title: str, description: str, positive_keywords: list,
-                       negative_keywords: list) -> tuple:
-    text = f"{title} {description}".lower()
-
-    for kw in negative_keywords:
-        if kw in text:
-            return -1.0, []
-
-    matched = []
-    score = 0.0
-
-    for kw in positive_keywords:
-        if kw in text:
-            matched.append(kw)
-            score += 2.0 if kw in title.lower() else 1.0
-
-    return score, matched
+def calculate_priority(title: str, description: str, positive_keywords: list = None,
+                       negative_keywords: list = None) -> tuple:
+    """Pre-filter score (see scoring.py). The keyword lists from the DB are no
+    longer used: they matched substrings ("sec" in "section", "ban" in "bank")
+    and missed oil, yields, FX and all Brazil terms. Never negative: nothing is
+    discarded at fetch time any more, the LLM triage decides."""
+    from scoring import score_headline
+    return score_headline(title, description)
 
 
 def parse_date(date_str: str) -> Optional[datetime]:
@@ -187,11 +178,7 @@ def process_feed(source: dict, positive_kw: list, negative_kw: list, conn=None) 
                         stats["stale_count"] += 1
                         continue
 
-                score, matched = calculate_priority(title, description, positive_kw, negative_kw)
-
-                if score < 0:
-                    stats["skipped_count"] += 1
-                    continue
+                score, matched = calculate_priority(title, description)
 
                 # Aplicar peso da categoria da fonte
                 source_weight = SOURCE_CATEGORY_WEIGHT.get(source.get("category", ""), 1.0)

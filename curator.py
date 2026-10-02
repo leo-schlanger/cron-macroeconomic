@@ -35,7 +35,7 @@ MIN_IMPACT = int(os.getenv("CURATOR_MIN_IMPACT", "7"))
 PER_RUN = int(os.getenv("CURATOR_PER_RUN", "2"))
 DAILY_MAX = int(os.getenv("CURATOR_DAILY_MAX", "12"))
 CANDIDATE_HOURS = int(os.getenv("CURATOR_CANDIDATE_HOURS", "6"))
-CANDIDATE_MIN_SCORE = float(os.getenv("CURATOR_MIN_SCORE", "4.0"))
+CANDIDATE_MIN_SCORE = float(os.getenv("CURATOR_MIN_SCORE", "6.0"))  # scoring.py scale
 CANDIDATE_LIMIT = int(os.getenv("CURATOR_CANDIDATE_LIMIT", "60"))
 
 MIN_CHARS_PT = 2500
@@ -109,7 +109,10 @@ def gemini_json(system: str, user: str, schema: dict, max_tokens: int) -> dict:
             json={
                 "systemInstruction": {"parts": [{"text": system}]},
                 "contents": [{"parts": [{"text": user}]}],
-                "generationConfig": {"temperature": 0.4, "maxOutputTokens": max_tokens,
+                # 2.5 Flash "thinks" inside the output budget and truncated the JSON:
+                # no thinking for this structured task, and generous headroom.
+                "generationConfig": {"temperature": 0.4, "maxOutputTokens": max(max_tokens * 2, 8192),
+                                     "thinkingConfig": {"thinkingBudget": 0},
                                      "responseMimeType": "application/json",
                                      "responseSchema": _gemini_schema(schema)},
             },
@@ -120,10 +123,12 @@ def gemini_json(system: str, user: str, schema: dict, max_tokens: int) -> dict:
     if r.status_code != 200:
         raise LLMError(f"Gemini HTTP {r.status_code}")
     try:
-        text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+        cand = r.json()["candidates"][0]
+        text = cand["content"]["parts"][0]["text"]
         return json.loads(text)
     except (KeyError, IndexError, ValueError) as e:
-        raise LLMError(f"Gemini resposta inválida: {type(e).__name__}")
+        reason = locals().get("cand", {}).get("finishReason", "?")
+        raise LLMError(f"Gemini resposta inválida: {type(e).__name__} (finishReason={reason})")
 
 
 def structured(system: str, user: str, tool: dict, max_tokens: int) -> tuple[dict, str]:
@@ -157,9 +162,13 @@ Escala:
 - 0-3: rotina, agenda, resumos de sessão, circulares administrativas, opinião sem fato novo.
 
 Regras:
-- Valorize FATO NOVO e SURPRESA vs o esperado; previews e "o que observar hoje" valem pouco.
-- Agrupe a mesma história de fontes diferentes com o MESMO valor em "story" (chave curta em inglês,
-  ex.: "fed-logan-hikes"); avalie a melhor versão e dê nota baixa às demais.
+- Valorize o FATO PRIMÁRIO e a SURPRESA vs o esperado: o dado divulgado, a decisão, o movimento de
+  preço relevante. Previews, agendas e "o que observar hoje" valem no máximo 4.
+- Entrevistas e opiniões de analistas/gestores ("X on Y", "X says markets..."), e matérias sobre quem
+  ganhou ou perdeu com um movimento, valem no máximo 5, a menos que tragam fato novo.
+- "story" é o TEMA AMPLO em 2-3 palavras em inglês (ex.: "france-bonds", "oil-supply", "fed-policy",
+  "us-payrolls", "boj-policy"). TODAS as manchetes do mesmo tema recebem a MESMA chave, mesmo vindo de
+  ângulos diferentes; dê a nota cheia só à melhor versão do tema.
 - Se a história já foi publicada nas últimas 24h (lista abaixo), só dê nota alta se houver fato novo relevante.
 - Devolva apenas itens com nota >= 5."""
 
@@ -201,10 +210,12 @@ def build_triage_prompt(candidates: list[dict], recent_titles: list[str]) -> str
 
 
 def select_for_publication(ranked: list[dict], valid_ids: set, slots: int,
-                           min_impact: int = MIN_IMPACT) -> list[dict]:
-    """Highest impact first, one per story, only ids we sent, at most ``slots``."""
+                           min_impact: int = MIN_IMPACT, prefilter: dict | None = None) -> list[dict]:
+    """Highest impact first (keyword score breaks ties), one per story, only
+    ids we sent, at most ``slots``."""
+    prefilter = prefilter or {}
     out, seen = [], set()
-    for item in sorted(ranked, key=lambda x: -int(x.get("impact", 0))):
+    for item in sorted(ranked, key=lambda x: (-int(x.get("impact", 0)), -prefilter.get(x.get("id"), 0))):
         if len(out) >= slots:
             break
         story = (item.get("story") or "").strip().lower()
@@ -323,10 +334,11 @@ def get_candidates() -> list[dict]:
                s.name AS source_name, s.category
         FROM news n
         JOIN sources s ON s.id = n.source_id
-        LEFT JOIN processing_queue pq ON pq.news_id = n.id
         WHERE n.fetched_at > NOW() - make_interval(hours => %s)
           AND n.priority_score >= %s
-          AND pq.id IS NULL
+          -- never evaluated, or still waiting in the legacy processor queue
+          AND NOT EXISTS (SELECT 1 FROM processing_queue pq
+                          WHERE pq.news_id = n.id AND pq.status <> 'pending')
         ORDER BY n.priority_score DESC, n.published_at DESC NULLS LAST
         LIMIT %s
     """, (CANDIDATE_HOURS, CANDIDATE_MIN_SCORE, CANDIDATE_LIMIT))
@@ -351,10 +363,12 @@ def mark(news_ids: list[int], status: str, message: str | None = None) -> None:
     try:
         cur = conn.cursor()
         for nid in news_ids:
-            # Candidates never have a queue row yet (see get_candidates), and each
-            # one is marked exactly once per run.
-            cur.execute("""INSERT INTO processing_queue (news_id, status, error_message, processed_at)
-                           VALUES (%s, %s, %s, CURRENT_TIMESTAMP)""", (nid, status, message))
+            # Legacy rows ('pending' from processor.py) are updated, never duplicated.
+            cur.execute("""UPDATE processing_queue SET status = %s, error_message = %s,
+                           processed_at = CURRENT_TIMESTAMP WHERE news_id = %s""", (status, message, nid))
+            if cur.rowcount == 0:
+                cur.execute("""INSERT INTO processing_queue (news_id, status, error_message, processed_at)
+                               VALUES (%s, %s, %s, CURRENT_TIMESTAMP)""", (nid, status, message))
         conn.commit()
     finally:
         conn.close()
@@ -364,7 +378,7 @@ def mark(news_ids: list[int], status: str, message: str | None = None) -> None:
 
 def run(dry_run: bool = False) -> dict:
     stats = {"candidates": 0, "ranked": 0, "published": 0, "drafts": 0, "errors": 0}
-    slots = min(PER_RUN, DAILY_MAX - published_today())
+    slots = max(0, min(PER_RUN, DAILY_MAX - published_today()))
     logger.info(f"[curator] vagas nesta rodada: {slots} (máx {PER_RUN}/rodada, {DAILY_MAX}/dia)")
     if slots <= 0:
         return stats
@@ -384,10 +398,15 @@ def run(dry_run: bool = False) -> dict:
     items = ranked.get("items") or []
     stats["ranked"] = len(items)
     by_id = {c["id"]: c for c in candidates}
-    chosen = select_for_publication(items, set(by_id), slots)
-    for it in sorted(items, key=lambda x: -int(x.get("impact", 0)))[:8]:
-        logger.info(f"  {it.get('impact'):>2} [{it.get('story')}] {by_id.get(it.get('id'), {}).get('title', '?')[:80]}")
-    logger.info(f"[curator] triagem via {provider}: {len(items)} com nota >= 5, {len(chosen)} escolhidas")
+    pre = {c["id"]: c.get("priority_score") or 0 for c in candidates}
+    chosen = select_for_publication(items, set(by_id), slots, prefilter=pre)
+    picked = {c["id"] for c in chosen}
+    logger.info(f"[curator] triagem via {provider}: {len(candidates)} candidatas, "
+                f"{len(items)} com nota >= 5, {len(chosen)} escolhidas")
+    for it in sorted(items, key=lambda x: (-int(x.get("impact", 0)), -pre.get(x.get("id"), 0)))[:10]:
+        mark_ = "→" if it.get("id") in picked else " "
+        logger.info(f"  {mark_} {it.get('impact'):>2} [{it.get('story')}] "
+                    f"{by_id.get(it.get('id'), {}).get('title', '?')[:80]}")
     if dry_run:
         return stats
 
