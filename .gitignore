@@ -33,3 +33,4 @@ nul
 
 # Working feeds (gerado automaticamente)
 working_feeds.json
+.coverage

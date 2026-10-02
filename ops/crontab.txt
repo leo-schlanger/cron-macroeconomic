@@ -1,0 +1,4 @@
+# cron_macroeconomic (VPS: Claude Haiku primário + Gemini grátis de reserva, Postgres local)
+5 * * * * flock -n /tmp/cron-macro-fetch.lock /opt/cron-macroeconomic/run.sh main_cloud.py fetch --quiet >> /opt/cron-macroeconomic/logs/fetch.log 2>&1
+15 */2 * * * /opt/cron-macroeconomic/cron_process.sh >> /opt/cron-macroeconomic/logs/process.log 2>&1
+0 3 * * 0 /opt/cron-macroeconomic/run.sh main_cloud.py cleanup --days 30 >> /opt/cron-macroeconomic/logs/cleanup.log 2>&1

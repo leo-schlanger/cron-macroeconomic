@@ -276,9 +276,10 @@ def save_blog_post(
     source_name: str,
     category: str,
     tags: list,
-    priority_score: float
+    priority_score: float,
+    status: str = "published",
 ) -> int:
-    """Salva post do blog processado."""
+    """Salva post do blog processado (``status='draft'`` fica fora do blog até revisão)."""
     conn = get_connection()
     try:
         cursor = conn.cursor()
@@ -299,14 +300,15 @@ def save_blog_post(
                     status, published_at
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    'published', NOW()
+                    %s, CASE WHEN %s = 'published' THEN NOW() END
                 ) RETURNING id
             """, (
                 news_id, title_pt, slug_pt, content_pt, summary_pt,
                 title_en, slug_en, content_en, summary_en,
                 image_url, source_url, source_name, category, tags_str, priority_score,
                 summary_pt[:160] if summary_pt else None,
-                summary_en[:160] if summary_en else None
+                summary_en[:160] if summary_en else None,
+                status, status
             ))
             post_id = cursor.fetchone()[0]
         else:

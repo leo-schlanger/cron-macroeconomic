@@ -27,8 +27,15 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Configuração
-AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")  # gemini, anthropic ou openai
+AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")  # ollama, gemini, anthropic ou openai
 MAX_API_RETRIES = 3
+
+# Ollama local (VPS) — custo zero, sem rate limit. Só é usado quando AI_PROVIDER=ollama.
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "900"))  # inferência em CPU é lenta
+OLLAMA_NUM_PREDICT = int(os.getenv("OLLAMA_NUM_PREDICT", "3072"))  # limita o tamanho da geração
+OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "15m")  # mantém o modelo quente entre artigos
 
 
 def extract_image_from_content(content: str, link: str) -> Optional[str]:
@@ -282,8 +289,9 @@ RESPONDA APENAS EM JSON (sem markdown, sem ```):
 }}"""
 
     response = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}",
-        headers={"Content-Type": "application/json"},
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        # Chave no cabeçalho, nunca na URL: erros de conexão gravam a URL no log.
+        headers={"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY},
         json={
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
@@ -326,34 +334,133 @@ RESPONDA APENAS EM JSON (sem markdown, sem ```):
         raise Exception(f"Gemini JSON inválido: {text[:200]}")
 
 
+def rewrite_with_ollama(title: str, content: str, source_name: str) -> dict:
+    """Reescreve notícia usando Ollama local (grátis, sem rate limit). Sem retry — fail fast para fallback."""
+    prompt = f"""Você é um jornalista econômico especializado em macroeconomia e mercados financeiros.
+Com base nos FATOS da notícia abaixo, escreva um artigo ORIGINAL de blog com sua própria análise e estrutura.
+
+FATOS DA NOTÍCIA (apenas como referência factual):
+Título: {title}
+Fonte: {source_name}
+Conteúdo: {content[:2000]}
+
+INSTRUÇÕES DE ORIGINALIDADE (CRÍTICO):
+1. NÃO copie frases, estrutura ou parágrafos da notícia original
+2. Crie uma estrutura e narrativa completamente novas
+3. Use vocabulário e construções frasais diferentes do original
+4. Adicione contexto macroeconômico relevante (ex: como isso se conecta a tendências globais)
+5. Crie um título original que NÃO seja tradução ou paráfrase direta do original
+6. O artigo deve funcionar de forma independente - um leitor não precisa ler a fonte original
+7. Inclua ao final do conteúdo uma linha de atribuição: "Fonte original: {source_name}"
+
+INSTRUÇÕES DE FORMATO:
+1. Estruture com 3-5 parágrafos bem desenvolvidos
+2. Use tom profissional, objetivo e factual
+3. Gere um resumo de 2-3 frases
+4. Crie 3-5 tags relevantes
+
+DIRETRIZES DE IMPARCIALIDADE:
+- Seja ESTRITAMENTE IMPARCIAL politicamente - não tome partido em conflitos
+- Foque APENAS nos impactos econômicos e de mercado
+- NÃO use linguagem emotiva ou sensacionalista
+- NÃO faça julgamentos morais sobre países, governos ou grupos
+- Apresente fatos de forma equilibrada, citando múltiplas perspectivas quando relevante
+- Evite termos carregados como "terrorista", "regime", "colonizador" - use termos neutros
+- Se a notícia envolver conflitos, foque APENAS nas consequências econômicas (preço do petróleo, mercados, sanções, comércio)
+
+RESPONDA APENAS EM JSON (sem markdown, sem ```):
+{{
+    "title_pt": "título original em português",
+    "content_pt": "conteúdo original em português (3-5 parágrafos, com atribuição ao final)",
+    "summary_pt": "resumo em português",
+    "title_en": "original title in English",
+    "content_en": "original content in English (3-5 paragraphs, with attribution at the end)",
+    "summary_en": "summary in English",
+    "tags": ["tag1", "tag2", "tag3"]
+}}"""
+
+    response = requests.post(
+        f"{OLLAMA_URL}/api/generate",
+        json={
+            "model": OLLAMA_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",  # força saída JSON válida
+            "keep_alive": OLLAMA_KEEP_ALIVE,  # mantém o modelo carregado entre artigos
+            "options": {
+                "temperature": 0.7,
+                "num_predict": OLLAMA_NUM_PREDICT
+            }
+        },
+        timeout=OLLAMA_TIMEOUT
+    )
+
+    if response.status_code != 200:
+        raise Exception(f"Ollama API error: {response.status_code} - {response.text[:200]}")
+
+    result = response.json()
+    text = result.get("response", "")
+    if not text:
+        raise Exception("Ollama retornou resposta vazia")
+
+    # format=json já garante JSON válido, mas mantemos a extração robusta por segurança
+    json_match = re.search(r'\{[\s\S]*\}', text)
+    if json_match:
+        json_str = json_match.group()
+        json_str = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', ' ', json_str)
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            def fix_string_newlines(m):
+                s = m.group(0)
+                s = s.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+                return s
+            json_str = re.sub(r'"[^"]*"', fix_string_newlines, json_str)
+            return json.loads(json_str)
+    else:
+        raise Exception(f"Ollama JSON inválido: {text[:200]}")
+
+
 # Contadores por run para logging
-_provider_stats = {"gemini": 0, "claude": 0}
+_provider_stats = {"ollama": 0, "gemini": 0, "claude": 0}
+
+
+def build_provider_chain():
+    """Monta a ordem de tentativa dos providers conforme AI_PROVIDER.
+    - AI_PROVIDER=gemini (padrão): Gemini -> Claude/OpenAI
+    - AI_PROVIDER=ollama: Ollama -> Gemini -> Claude/OpenAI"""
+    chain = []
+    if AI_PROVIDER == "ollama":
+        chain.append(("ollama", rewrite_with_ollama))
+        if GEMINI_API_KEY:
+            chain.append(("gemini", rewrite_with_gemini))
+    else:
+        # Ollama fica fora por padrão: em CPU (VPS de 2 núcleos) leva 4-10 min por artigo,
+        # satura o servidor e produz texto fraco. Só entra com AI_PROVIDER=ollama.
+        if GEMINI_API_KEY:
+            chain.append(("gemini", rewrite_with_gemini))
+    if ANTHROPIC_API_KEY:
+        chain.append(("claude", rewrite_with_anthropic))
+    if OPENAI_API_KEY:
+        chain.append(("openai", rewrite_with_openai))
+    return chain
 
 
 def rewrite_news(title: str, content: str, source_name: str) -> dict:
-    """Reescreve notícia: tenta Gemini (grátis) primeiro, fallback para Claude se falhar."""
-    # Tentar Gemini primeiro (grátis)
-    if GEMINI_API_KEY:
+    """Reescreve notícia tentando os providers em ordem (ver build_provider_chain)."""
+    last_exc = None
+    for name, fn in build_provider_chain():
         try:
-            result = rewrite_with_gemini(title, content, source_name)
-            _provider_stats["gemini"] += 1
-            logger.info("  [Gemini] OK")
+            result = fn(title, content, source_name)
+            if name in _provider_stats:
+                _provider_stats[name] += 1
+            logger.info(f"  [{name}] OK")
             return result
         except Exception as e:
-            logger.warning(f"  [Gemini] Falhou ({str(e)[:60]}), fallback Claude...")
+            last_exc = e
+            logger.warning(f"  [{name}] Falhou ({str(e)[:60]})")
 
-    # Fallback para Claude
-    if ANTHROPIC_API_KEY:
-        result = rewrite_with_anthropic(title, content, source_name)
-        _provider_stats["claude"] += 1
-        logger.info("  [Claude] OK (fallback)")
-        return result
-
-    # Fallback final para OpenAI
-    if OPENAI_API_KEY:
-        return rewrite_with_openai(title, content, source_name)
-
-    raise Exception("Nenhuma API de IA configurada. Configure GEMINI_API_KEY ou ANTHROPIC_API_KEY")
+    raise Exception(f"Todos os providers de IA falharam. Último erro: {last_exc}")
 
 
 def process_single_news(news: dict) -> bool:
@@ -460,17 +567,9 @@ def process_queue(limit: int = 10):
     logger.info("PROCESSAMENTO DE NOTÍCIAS PARA BLOG")
     logger.info("=" * 50)
 
-    # Verificar API
-    if not GEMINI_API_KEY and not OPENAI_API_KEY and not ANTHROPIC_API_KEY:
-        logger.error("ERRO: Configure GEMINI_API_KEY, ANTHROPIC_API_KEY ou OPENAI_API_KEY")
-        return
-
-    providers = []
-    if GEMINI_API_KEY:
-        providers.append("Gemini (primário)")
-    if ANTHROPIC_API_KEY:
-        providers.append("Claude (fallback)")
-    logger.info(f"Providers: {', '.join(providers)}")
+    # Ordem de tentativa dos providers (sempre há ao menos o Ollama local)
+    chain_names = [n for n, _ in build_provider_chain()]
+    logger.info(f"Providers (ordem): {' -> '.join(chain_names)}")
 
     # Pegar notícias pendentes
     pending = get_pending_news(limit * 2)  # Pegar mais para compensar duplicatas
@@ -482,6 +581,7 @@ def process_queue(limit: int = 10):
     logger.info(f"Após deduplicação: {len(pending)}")
 
     # Reset contadores
+    _provider_stats["ollama"] = 0
     _provider_stats["gemini"] = 0
     _provider_stats["claude"] = 0
 
@@ -494,13 +594,13 @@ def process_queue(limit: int = 10):
         else:
             errors += 1
 
-        # Delay entre artigos para respeitar rate limit do Gemini (5 RPM)
+        # Delay entre artigos: Ollama local não tem rate limit; só o Gemini (5 RPM) precisa
         if i < len(pending) - 1:
-            time.sleep(15)
+            time.sleep(2 if AI_PROVIDER == "ollama" else 15)
 
     logger.info("=" * 50)
     logger.info(f"Concluído: {success} sucesso, {errors} erros")
-    logger.info(f"Providers usados: Gemini={_provider_stats['gemini']}, Claude={_provider_stats['claude']}")
+    logger.info(f"Providers usados: Ollama={_provider_stats['ollama']}, Gemini={_provider_stats['gemini']}, Claude={_provider_stats['claude']}")
     logger.info("=" * 50)
 
 
