@@ -241,7 +241,7 @@ ESTRUTURA do content_pt em Markdown (títulos com ##, 450-700 palavras):
 ## O que aconteceu
 ## Por que importa
 ## Impacto nos mercados
-   (lista com as classes RELEVANTES apenas: **Juros/Treasuries**, **Dólar e câmbio**, **Bolsas**,
+   (lista com as classes RELEVANTES apenas: **Juros e títulos**, **Dólar e câmbio**, **Bolsas**,
    **Commodities**, **Cripto**, **Brasil**: direção provável e o porquê)
 ## O que acompanhar
    (próximos dados, decisões ou eventos que confirmam ou invalidam a leitura)
@@ -448,9 +448,34 @@ def run(dry_run: bool = False) -> dict:
     return stats
 
 
+def preview() -> None:
+    """Rank current candidates and write the top article, printing it.
+    Nothing is saved or marked: safe to run any time."""
+    candidates = get_candidates()
+    if not candidates:
+        print("nenhuma candidata")
+        return
+    ranked, provider = structured(TRIAGE_SYSTEM, build_triage_prompt(candidates, recent_titles()), TRIAGE_TOOL, 2000)
+    pre = {c["id"]: c.get("priority_score") or 0 for c in candidates}
+    chosen = select_for_publication(ranked.get("items") or [], {c["id"] for c in candidates}, 1, prefilter=pre)
+    if not chosen:
+        print(f"triagem ({provider}): nada com impacto >= {MIN_IMPACT}")
+        return
+    news = next(c for c in candidates if c["id"] == chosen[0]["id"])
+    art, provider = structured(ARTICLE_SYSTEM, build_article_prompt(news, chosen[0]), ARTICLE_TOOL, 6000)
+    print(f"FONTE: {news['title']} ({news['source_name']}) | impacto {chosen[0]['impact']} | via {provider}")
+    print(f"QUALIDADE: {quality_problems(art) or 'OK, seria publicado'}")
+    print(f"PT ({len(art.get('content_pt', ''))} chars) / EN ({len(art.get('content_en', ''))} chars)")
+    print("\n# " + art.get("title_pt", "") + "\n\n" + art.get("summary_pt", "") + "\n\n" + art.get("content_pt", ""))
+    print("\n--- EN title:", art.get("title_en"), "| tags:", art.get("tags"))
+
+
 if __name__ == "__main__":
     import argparse
     p = argparse.ArgumentParser(description="Curadoria de notícias de alto impacto para o blog")
-    p.add_argument("command", choices=["run", "dry-run"])
+    p.add_argument("command", choices=["run", "dry-run", "preview"])
     args = p.parse_args()
-    run(dry_run=args.command == "dry-run")
+    if args.command == "preview":
+        preview()
+    else:
+        run(dry_run=args.command == "dry-run")
