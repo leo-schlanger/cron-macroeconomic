@@ -518,66 +518,76 @@ def get_news_stats() -> dict:
         conn.close()
 
 
-def cleanup_old_news(days: int = 30, preserve_high_priority: bool = True, high_priority_days: int = 90):
+def _has_table(cursor, name: str) -> bool:
+    if is_postgres():
+        cursor.execute("SELECT to_regclass(%s)", (name,))
+    else:
+        cursor.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (name,))
+    row = cursor.fetchone()
+    return bool(row and row[0])
+
+
+def cleanup_old_news(days: int = 30, preserve_high_priority: bool = True, high_priority_days: int = 90,
+                     dry_run: bool = False):
     """Remove notícias antigas, preservando artigos de alto impacto para ML por tempo limitado.
+
+    Notícias com blog_posts ficam sempre (FK blog_posts_news_id_fkey); as linhas da
+    processing_queue das notícias apagadas saem antes, na mesma transação.
 
     Args:
         days: Dias de retenção para artigos normais
         preserve_high_priority: Se True, preserva artigos com priority_score >= 4.0 para ML
         high_priority_days: Dias de retenção para artigos de alta prioridade (default: 90)
+        dry_run: Executa tudo e faz ROLLBACK no fim (nada é apagado)
     """
+    pg = is_postgres()
+    ph = "%s" if pg else "?"
+    false = "FALSE" if pg else "0"
+
+    def older_than(n):
+        if pg:
+            return f"fetched_at < CURRENT_TIMESTAMP - INTERVAL '1 day' * {ph}", (n,)
+        return f"fetched_at < datetime('now', {ph})", (f"-{n} days",)
+
     conn = get_connection()
     try:
         cursor = conn.cursor()
+        if pg and dry_run:
+            cursor.execute("SET LOCAL lock_timeout = '5s'")
 
-        # Cleanup de notícias antigas (preserva publicadas e alto impacto para ML por tempo limitado)
-        if is_postgres():
-            if preserve_high_priority:
-                # Notícias normais: delete após 'days' dias
-                cursor.execute("""
-                    DELETE FROM news
-                    WHERE fetched_at < CURRENT_TIMESTAMP - INTERVAL '1 day' * %s
-                    AND is_published_blog = FALSE
-                    AND priority_score < 4.0
-                """, (days,))
-                deleted_normal = cursor.rowcount
-                # Notícias de alta prioridade: delete após 'high_priority_days' dias
-                cursor.execute("""
-                    DELETE FROM news
-                    WHERE fetched_at < CURRENT_TIMESTAMP - INTERVAL '1 day' * %s
-                    AND is_published_blog = FALSE
-                    AND priority_score >= 4.0
-                """, (high_priority_days,))
-            else:
-                cursor.execute("""
-                    DELETE FROM news
-                    WHERE fetched_at < CURRENT_TIMESTAMP - INTERVAL '1 day' * %s
-                    AND is_published_blog = FALSE
-                """, (days,))
+        has_posts = _has_table(cursor, "blog_posts")
+        has_queue = _has_table(cursor, "processing_queue")
+        has_post = "EXISTS (SELECT 1 FROM blog_posts b WHERE b.news_id = news.id)"
+        no_post = f" AND NOT {has_post}" if has_posts else ""
+
+        # (label, condition, params); CURRENT_TIMESTAMP is fixed per transaction in Postgres
+        groups = []
+        if preserve_high_priority:
+            cond, params = older_than(days)
+            groups.append(("normal", f"{cond} AND is_published_blog = {false} AND priority_score < 4.0", params))
+            cond, params = older_than(high_priority_days)
+            groups.append(("high", f"{cond} AND is_published_blog = {false} AND priority_score >= 4.0", params))
         else:
-            if preserve_high_priority:
-                cursor.execute("""
-                    DELETE FROM news
-                    WHERE fetched_at < datetime('now', ?)
-                    AND is_published_blog = 0
-                    AND priority_score < 4.0
-                """, (f"-{days} days",))
-                deleted_normal = cursor.rowcount
-                cursor.execute("""
-                    DELETE FROM news
-                    WHERE fetched_at < datetime('now', ?)
-                    AND is_published_blog = 0
-                    AND priority_score >= 4.0
-                """, (f"-{high_priority_days} days",))
-            else:
-                cursor.execute("""
-                    DELETE FROM news
-                    WHERE fetched_at < datetime('now', ?)
-                    AND is_published_blog = 0
-                """, (f"-{days} days",))
+            cond, params = older_than(days)
+            groups.append(("all", f"{cond} AND is_published_blog = {false}", params))
 
-        deleted_high = cursor.rowcount
-        deleted_news = deleted_normal + deleted_high if preserve_high_priority else cursor.rowcount
+        deleted = {}
+        kept_with_post = 0
+        for label, cond, params in groups:
+            if has_posts:
+                cursor.execute(f"SELECT COUNT(*) FROM news WHERE {cond} AND {has_post}", params)
+                kept_with_post += cursor.fetchone()[0]
+            where = cond + no_post
+            # Children first: processing_queue.news_id references news(id)
+            if has_queue:
+                cursor.execute(f"DELETE FROM processing_queue WHERE news_id IN (SELECT id FROM news WHERE {where})",
+                               params)
+            cursor.execute(f"DELETE FROM news WHERE {where}", params)
+            deleted[label] = cursor.rowcount
+
+        deleted_news = sum(deleted.values())
+        deleted_normal = deleted.get("normal", 0)
+        deleted_high = deleted.get("high", 0)
 
         # Cleanup de fetch_logs (sempre limpa, não tem valor histórico)
         if is_postgres():
@@ -593,11 +603,16 @@ def cleanup_old_news(days: int = 30, preserve_high_priority: bool = True, high_p
 
         deleted_logs = cursor.rowcount
 
-        conn.commit()
+        if dry_run:
+            conn.rollback()
+            print("[DB] DRY-RUN: ROLLBACK, nada foi apagado")
+        else:
+            conn.commit()
         print(f"[DB] {deleted_news} notícias antigas removidas")
         if preserve_high_priority:
             print(f"[DB]   (normais: {deleted_normal}, alta prioridade >90d: {deleted_high})")
         print(f"[DB] {deleted_logs} logs de fetch removidos")
+        print(f"[DB] {kept_with_post} notícias antigas mantidas por terem blog post")
         return deleted_news
     finally:
         conn.close()

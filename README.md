@@ -2,6 +2,19 @@
 
 A powerful, automated macroeconomic and cryptocurrency news aggregator with intelligent keyword-based prioritization and AI-driven content processing.
 
+## Production (cron)
+
+Runs on a Linux server from `/opt/cron-macroeconomic` against a PostgreSQL database (`DATABASE_URL` in `config.env`, kept out of git). The crontab is in `ops/crontab.txt`:
+
+| Schedule | Command | What it does |
+|---|---|---|
+| `5 * * * *` | `run.sh main_cloud.py fetch --quiet` | Fetch RSS feeds into `news` |
+| `15 */2 * * *` | `cron_process.sh` (`curator.py run`) | Curate high-impact news into blog posts |
+| `0 3 * * 0` | `run.sh main_cloud.py cleanup --days 30` | Delete old news (queue rows first; news with a blog post are kept). `--dry-run` rolls back |
+| `10 3 * * 0` | `run.sh blog_maintenance.py run` | Weekly blog hygiene |
+
+`HEALTHCHECK_URL` (optional, set on the cron line) is pinged by `ops/run.sh` only when the job succeeds. Deploy = copy the changed files to the server (`ops/run.sh` and `ops/cron_process.sh` go to the project root).
+
 ## 🚀 Overview
 
 This project is a high-efficiency news aggregator designed to monitor global economic shifts and crypto market trends. It collects data from over **60 RSS feeds**, prioritizes them based on strategic keywords, and can automatically rewrite selected high-impact news into professional blog posts using OpenAI or Anthropic AI.

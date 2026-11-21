@@ -76,11 +76,11 @@ def setup():
     show_stats()
 
 
-def cleanup(days: int = 30):
+def cleanup(days: int = 30, dry_run: bool = False):
     """Remove notícias antigas, preservando alto impacto para ML por tempo limitado."""
-    print(f"Removendo notícias com mais de {days} dias...")
+    print(f"Removendo notícias com mais de {days} dias...{' (dry-run)' if dry_run else ''}")
     print(f"(Preservando: blog posts e artigos com priority_score >= 4.0 até 90 dias)")
-    deleted = cleanup_old_news(days, preserve_high_priority=True, high_priority_days=90)
+    deleted = cleanup_old_news(days, preserve_high_priority=True, high_priority_days=90, dry_run=dry_run)
     print(f"\nTotal removidas: {deleted} notícias")
 
 
@@ -98,6 +98,7 @@ def main():
 
     cleanup_parser = subparsers.add_parser("cleanup", help="Limpa notícias antigas")
     cleanup_parser.add_argument("--days", "-d", type=int, default=30)
+    cleanup_parser.add_argument("--dry-run", action="store_true", help="Executa e faz ROLLBACK")
 
     args = parser.parse_args()
 
@@ -108,7 +109,7 @@ def main():
     elif args.command == "stats":
         show_stats()
     elif args.command == "cleanup":
-        cleanup(days=args.days)
+        cleanup(days=args.days, dry_run=args.dry_run)
     else:
         parser.print_help()
 

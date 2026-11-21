@@ -34,3 +34,7 @@ nul
 # Working feeds (gerado automaticamente)
 working_feeds.json
 .coverage
+
+# Server-only
+config.env
+logs/
